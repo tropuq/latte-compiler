@@ -6,11 +6,29 @@ Prog.   Program ::= [TopDef] ;
 
 FnDef.	   TopDef ::= Type Ident "(" [Arg] ")" Block ;
 
+ClassDef.  TopDef ::= "class" Ident ClassBlock ;
+
+ClassDefExt.  TopDef ::= "class" Ident "extends" Ident ClassBlock ;
+
 separator nonempty TopDef "" ;
 
 Ar. 	   Arg ::= Type Ident;
 
 separator  Arg "," ;
+
+
+-- classes ----------------------------------------------
+
+ClassBlk.	ClassBlock ::= "{" [ClassDecl] "}" ;
+
+separator  ClassDecl "" ;
+
+FieldDecl.     ClassDecl ::= Type [Ident] ";" ;
+
+MethodDecl.     ClassDecl ::= Type Ident "(" [Arg] ")" Block ;
+
+separator nonempty Ident "," ;
+
 
 -- statements ----------------------------------------------
 
@@ -24,17 +42,16 @@ BStmt.     Stmt ::= Block ;
 
 Decl.      Stmt ::= Type [Item] ";" ;
 
-NoInit.    Item ::= Ident ; 
+NoInit.    Item ::= Ident ;
 
 Init.      Item ::= Ident "=" Expr ;
 
 separator nonempty Item "," ;
 
-Ass.       Stmt ::= Ident "=" Expr  ";" ;
-
-Incr.      Stmt ::= Ident "++"  ";" ;
-
-Decr.      Stmt ::= Ident "--"  ";" ;
+-- Need to check if first value is assignable
+Ass.       Stmt ::= Expr "=" Expr  ";" ;
+Incr.      Stmt ::= Expr "++"  ";" ;
+Decr.      Stmt ::= Expr "--"  ";" ;
 
 Ret.       Stmt ::= "return" Expr ";" ;
 
@@ -46,33 +63,58 @@ CondElse.  Stmt ::= "if" "(" Expr ")" Stmt "else" Stmt  ;
 
 While.     Stmt ::= "while" "(" Expr ")" Stmt ;
 
+For.     Stmt ::= "for" "(" TypeSimple Ident ":" Expr ")" Stmt ;
+
 SExp.      Stmt ::= Expr  ";" ;
 
 -- Types ---------------------------------------------------
 
-Int.       Type ::= "int" ;
+Int.       TypeSimple ::= "int" ;
 
-Str.       Type ::= "string" ;
+Str.       TypeSimple ::= "string" ;
 
-Bool.      Type ::= "boolean" ;
+Bool.      TypeSimple ::= "boolean" ;
+
+Class.     TypeSimple ::= Ident ;
 
 Void.      Type ::= "void" ;
 
-internal   Fun. Type ::= Type "(" [Type] ")" ;
+SingleType.     Type ::= TypeSimple ;
+
+ArrayType.     Type ::= TypeSimple "[]" ;
 
 separator  Type "," ;
 
+FieldValCall.   FieldVal ::= Ident "(" [Expr] ")" ;
+FieldValSingle. FieldVal ::= Ident ;
+
+FieldSingle. Field ::= FieldVal ;
+FieldArray.  Field ::= FieldVal "[" Expr "]" ;
+FieldSelf.   Field ::= "self" ;
+
+separator nonempty Field "."  ;
+
 -- Expressions ---------------------------------------------
 
-EVar.      Expr6 ::= Ident ;
+ENewObject. Expr6 ::= "new" Ident ;
+ENewArray.  Expr6 ::= "new" TypeSimple "[" Expr "]" ;
+
+-- Need to check if Expr = new ...
+ETmpVar.          Expr6 ::= "(" Expr ")" "." [Field] ;
+ETmpArrayElem.    Expr6 ::= "(" Expr ")" "[" Expr "]" ;
+ETmpArrayElemVar. Expr6 ::= "(" Expr ")" "[" Expr "]" "." [Field] ;
+
+-- Need to check if Expr = Ident
+ECastedNull.    Expr6 ::= "(" Expr ")" "null" ;
+ECastedArrNull. Expr6 ::= "(" TypeSimple "[]" ")" "null" ;
+
+EVar.      Expr6 ::= [Field] ;
 
 ELitInt.   Expr6 ::= Integer ;
 
 ELitTrue.  Expr6 ::= "true" ;
 
 ELitFalse. Expr6 ::= "false" ;
-
-EApp.      Expr6 ::= Ident "(" [Expr] ")" ;
 
 EString.   Expr6 ::= String ;
 
@@ -125,4 +167,3 @@ comment    "#" ;
 comment    "//" ;
 
 comment    "/*" "*/" ;
-
