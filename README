@@ -1,0 +1,38 @@
+Kompilacja:
+Za pomocą polecenia make.
+
+Uruchamianie:
+Tak jak w treści zadania
+./latc path/to/file
+
+Używane narzędzia i biblioteki:
+Parser został wygenerowany za pomocą programu bnfc dla języka C. Kompilator
+został napisany w języku C++. (Rozbieżność języka wynika z tego, że bnfc
+generował bardziej przyjemną dla mnie reprezentację drzewa programu w języku C,
+niż w języku C++).
+
+Struktura katalogów projektu:
+Cały kod znajduje się w katalogu src.
+W katalogu core znajduje się kod potrzebny w każdym kroku kompilacji (frontent, backend)
+	tree_types.hh - struktury opisujące drzewo programu do którego
+		jest konwertowane drzewo wygenerowane przez bnfc
+	compilation_errors.hh - wyjątki zwracane w przypadku błędu kompilacji + ładne
+		wypisywanie
+	code_pos.hh - struktura zawierająca pozycję w kodzie
+W katalogu frontend znajduje się kod frontendu (poza parserem)
+	verifier - sprawdza prawie cały kod pod względem poprawności
+	simplifier - upraszcza kod i wykonuje końcowe sprawdzenia, które wymagały
+		wcześniej uproszczeń kodu (np. sprawdzenie, czy funkcja zawiera returna)
+W katalogu parser znajduje się kod parsujący
+	convert - konwersja drzewa programu wygenerowanego przez bnfc do struktury
+		opisanej w core/tree_types.hh
+	reszta kodu jest wygenerowana przez bnfc
+W katalogu utils znajduje się implementacja ogólnych funkcjonalności używanych przez resztę kodu
+	code_printer - możliwość wypisywania konkretnej linijki kodu i zaznaczania
+		wybranego znaku z tej linijki
+	colors.hh - definicja kolorów używanych przy wypisywaniu
+	utils.hh - lososwe funkcje
+W katalogu backend znajduje się kod backendu. Kod został podzielony na dwa podkatalogi
+	ic - konwersja drzewa programu do kodu pośredniego i generację grafu przepływu dla funkcji
+	asm - konwersja kodu pośredniego do assemblera, w tym algorytm alokacji rejestrów
+Plik latc_x86_64.cc wywołuje całą resztę rozwiązania.
