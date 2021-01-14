@@ -19,9 +19,9 @@ extern exit
 
 empty_str db '', 0
 runtime_error db 'runtime error', 0
-print_int_fmt db `%d\n`, 0
+print_int_fmt db `%lld\n`, 0
 print_string_fmt db `%s\n`, 0
-read_int_fmt db `%d`, 0
+read_int_fmt db `%lld`, 0
 read_newlines_fmt db `%*[\n]`, 0
 read_line_fmt db `%m[^\n]`, 0
 
@@ -186,7 +186,7 @@ printString:
 readInt:
 	push rbp
 	mov rbp, rsp
-	sub rsp, 4
+	sub rsp, 8
 	and rsp, 0xfffffffffffffff0
 	push rsi
 	push rdi
@@ -196,7 +196,7 @@ readInt:
 	push r9
 	push r10
 	push r11
-	lea rsi, [rbp - 4]
+	lea rsi, [rbp - 8]
 	mov rdi, read_int_fmt
 	mov rax, 0
 	call scanf
@@ -205,7 +205,7 @@ readInt:
 	mov rax, 0
 	jmp .L2
 .L1:
-	mov eax, [rbp - 4]
+	mov rax, [rbp - 8]
 .L2:
 	pop r11
 	pop r10
