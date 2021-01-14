@@ -19,12 +19,24 @@ struct tree_node {
 using ident = std::string;
 
 struct type : tree_node {
-	enum class type_enum {
-		INT,
-		STR,
-		BOOL,
-		VOID,
-	} val;
+	struct single_type {
+		enum class type_enum {
+			INT,
+			STR,
+			BOOL,
+			VOID,
+		};
+		struct class_type {
+			ident id;
+		};
+		using val_type = std::variant<type_enum, class_type>;
+		val_type val;
+	};
+	struct array_type {
+		struct single_type val;
+	};
+	using val_type = std::variant<single_type, array_type>;
+	val_type val;
 };
 
 struct arg : tree_node {
@@ -33,15 +45,32 @@ struct arg : tree_node {
 };
 
 struct block;
+struct class_def;
+struct exp;
 struct func;
+struct func_call;
+struct item;
+struct nested_var;
+struct new_val;
 struct program;
 struct stmt;
-struct item;
-struct exp;
 
 struct program : tree_node {
 	using uptr = std::unique_ptr<program>;
-	std::vector<std::unique_ptr<func>> funcs;
+	using glob_def_type = std::variant<std::unique_ptr<func>, std::unique_ptr<class_def>>;
+	std::vector<glob_def_type> defs;
+};
+
+struct class_def : tree_node {
+	using uptr = std::unique_ptr<class_def>;
+	struct field : tree_node {
+		ident id;
+		type tp;
+	};
+	using glob_def_type = std::variant<std::unique_ptr<func>, field>;
+	ident class_id;
+	std::optional<ident> extends_id;
+	std::vector<glob_def_type> defs;
 };
 
 struct func : tree_node {
@@ -57,6 +86,28 @@ struct block : tree_node {
 	std::vector<std::unique_ptr<stmt>> stmts;
 };
 
+struct func_call {
+	core::ident id;
+	std::vector<std::unique_ptr<core::exp>> params;
+};
+
+struct new_val {
+	using tp_type = std::variant<type::single_type::class_type, type::array_type>;
+	tp_type tp;
+	std::optional<std::unique_ptr<core::exp>> arr_size; // if tp = array
+};
+
+struct nested_var {
+	using field_ident = core::ident;
+	struct self {};
+	using base_type = std::variant<self, func_call, field_ident, new_val>;
+	base_type base;
+
+	using array_pos = std::unique_ptr<core::exp>;
+	using field_type = std::variant<self, func_call, field_ident, array_pos>;
+	std::vector<field_type> fields;
+};
+
 struct stmt : tree_node {
 	using uptr = std::unique_ptr<stmt>;
 	struct block {
@@ -67,11 +118,11 @@ struct stmt : tree_node {
 		std::vector<std::unique_ptr<core::item>> items;
 	};
 	struct ass {
-		core::ident id;
+		core::nested_var v;
 		std::unique_ptr<core::exp> e;
 	};
 	struct unary {
-		core::ident id;
+		core::nested_var v;
 		enum class op_type {
 			INCR,
 			DECR,
@@ -89,11 +140,19 @@ struct stmt : tree_node {
 		std::unique_ptr<core::exp> e;
 		std::unique_ptr<core::stmt> s;
 	};
+	struct loop_for {
+		type::single_type tp;
+		core::ident id;
+		nested_var v;
+		std::unique_ptr<core::stmt> s;
+	};
 	struct exp {
 		std::unique_ptr<core::exp> e;
 	};
 	struct empty {};
-	std::variant<block, decl, ass, unary, ret, cond, loop_while, exp, empty> val;
+	using val_type = std::variant<block, decl, ass, unary, ret, cond,
+		loop_while, loop_for, exp, empty>;
+	val_type val;
 };
 
 struct item : tree_node {
@@ -104,13 +163,6 @@ struct item : tree_node {
 
 struct exp : tree_node {
 	using uptr = std::unique_ptr<exp>;
-	struct var {
-		core::ident id;
-	};
-	struct call {
-		core::ident id;
-		std::vector<std::unique_ptr<core::exp>> params;
-	};
 	struct binary {
 		std::unique_ptr<core::exp> e1;
 		std::unique_ptr<core::exp> e2;
@@ -143,7 +195,11 @@ struct exp : tree_node {
 			NEG,
 		} op;
 	};
-	std::variant<var, call, binary, unary, int, bool, std::string> val;
+	struct null {
+		using tp_type = std::variant<type::single_type::class_type, type::array_type>;
+		tp_type tp;
+	};
+	std::variant<nested_var, binary, unary, null, int, bool, std::string> val;
 };
 
 inline bool is_bool_oper(exp::binary::op_type op) {
@@ -246,8 +302,8 @@ inline exp::binary::bool_op_type negate_oper(exp::binary::bool_op_type op) {
 
 } // namespace latte::core
 
-inline std::ostream& operator<<(std::ostream& ost, latte::core::type::type_enum tp) {
-	using type_enum = latte::core::type::type_enum;
+inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type::type_enum tp) {
+	using type_enum = latte::core::type::single_type::type_enum;
 	switch (tp) {
 	case type_enum::INT: return ost << "int";
 	case type_enum::STR: return ost << "string";
@@ -255,6 +311,19 @@ inline std::ostream& operator<<(std::ostream& ost, latte::core::type::type_enum 
 	case type_enum::VOID: return ost << "void";
 	}
 	__builtin_unreachable();
+}
+
+inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type::class_type tp) {
+	return ost << "<" << tp.id << ">";
+
+}
+
+inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type tp) {
+	return ost << tp.val;
+}
+
+inline std::ostream& operator<<(std::ostream& ost, latte::core::type::array_type tp) {
+	return ost << tp.val.val << "[]";
 }
 
 inline std::ostream& operator<<(std::ostream& ost, const latte::core::type &tp) {
@@ -308,12 +377,8 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::block::upt
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::uptr &st);
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::uptr &e);
 
-inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::var &e) {
-	return ost << e.id;
-}
-
-inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::call &e) {
-	return ost << e.id << '(' << e.params << ')';
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::null &e) {
+	return ost << e.tp << " null";
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binary &e) {
@@ -340,16 +405,53 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::item::uptr
 	return ost;
 }
 
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::func_call &call) {
+	return ost << call.id << '(' << call.params << ')';
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::new_val &v) {
+	ost << "new ";
+	std::visit(overloaded {
+		[&](const latte::core::type::array_type &tp) {
+			ost << tp.val;
+		},
+		[&](auto &tp) {
+			ost << tp;
+		}
+	}, v.tp);
+	if (v.arr_size)
+		ost << '[' << *v.arr_size << ']';
+	return ost;
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::nested_var::self &) {
+	return ost << "self";
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::nested_var &v) {
+	if (!v.fields.empty() && std::holds_alternative<latte::core::new_val>(v.base))
+		ost << '(' << v.base << ')';
+	else
+		ost << v.base;
+	for (auto &f : v.fields) {
+		if (std::holds_alternative<latte::core::nested_var::array_pos>(f))
+			ost << '[' << f << ']';
+		else
+			ost << '.' << f ;
+	}
+	return ost;
+}
+
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::decl &st) {
 	return ost << st.tp << ' ' << st.items << '\n';
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::ass &st) {
-	return ost << st.id << " = " << st.e << '\n';
+	return ost << st.v << " = " << st.e << '\n';
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::unary &st) {
-	ost << st.id;
+	ost << st.v;
 	using unary_op_type = latte::core::stmt::unary::op_type;
 	switch (st.op) {
 	case unary_op_type::INCR:
@@ -369,15 +471,38 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::ret 
 	return ost << '\n';
 }
 
+namespace {
+
+inline std::ostream &_add_spaces_if_not_block(std::ostream &ost, const latte::core::stmt::uptr &st) {
+	if (std::holds_alternative<latte::core::stmt::block>(st->val))
+		ost << st->val;
+	else
+		ost << "  " << st->val;
+	return ost;
+}
+
+} // namespace
+
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::cond &st) {
-	ost << "if (" << st.e << ")\n" << st.s_true;
-	if (st.s_false)
-		ost << "else\n" << *st.s_false;
+	ost << "if (" << st.e << ")\n";
+	_add_spaces_if_not_block(ost, st.s_true);
+	if (st.s_false) {
+		ost << "else\n";
+		_add_spaces_if_not_block(ost, *st.s_false);
+	}
 	return ost;
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::loop_while &st) {
-	return ost << "while (" << st.e << ")\n" << st.s;
+	ost << "while (" << st.e << ")\n";
+	_add_spaces_if_not_block(ost, st.s);
+	return ost;
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::loop_for &st) {
+	ost << "for (" << st.tp << ' ' << st.id << " : " << st.v << ")\n";
+	_add_spaces_if_not_block(ost, st.s);
+	return ost;
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::exp &st) {
@@ -407,12 +532,29 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::arg &a) {
 	return ost << a.tp << ' ' << a.id;
 }
 
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::class_def::field &a) {
+	return ost << a.tp << ' ' << a.id << '\n';
+}
+
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::func::uptr &f) {
 	return ost << f->tp << ' ' << f->id << '(' << f->args << ")\n" << f->bl;
 }
 
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::class_def::uptr &c) {
+	ost << "class " << c->class_id << ' ';
+	if (c->extends_id)
+		ost << "extends " << *c->extends_id << ' ';
+	ost << "{\n";
+	for (auto &d : c->defs) {
+		std::stringstream ss;
+		ss << d;
+		ost << add_new_line_spaces(ss.str(), 2);
+	}
+	return ost << "}\n";
+}
+
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::program::uptr &prog) {
-	for (auto &func : prog->funcs)
-		ost << func;
+	for (auto &def : prog->defs)
+		ost << def;
 	return ost;
 }

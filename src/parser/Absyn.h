@@ -19,6 +19,12 @@ typedef struct ListTopDef_ *ListTopDef;
 struct ListArg_;
 typedef struct ListArg_ *ListArg;
 
+struct ListClassDecl_;
+typedef struct ListClassDecl_ *ListClassDecl;
+
+struct ListIdent_;
+typedef struct ListIdent_ *ListIdent;
+
 struct ListStmt_;
 typedef struct ListStmt_ *ListStmt;
 
@@ -27,6 +33,9 @@ typedef struct ListItem_ *ListItem;
 
 struct ListType_;
 typedef struct ListType_ *ListType;
+
+struct ListField_;
+typedef struct ListField_ *ListField;
 
 struct ListExpr_;
 typedef struct ListExpr_ *ListExpr;
@@ -40,6 +49,12 @@ typedef struct TopDef_ *TopDef;
 struct Arg_;
 typedef struct Arg_ *Arg;
 
+struct ClassBlock_;
+typedef struct ClassBlock_ *ClassBlock;
+
+struct ClassDecl_;
+typedef struct ClassDecl_ *ClassDecl;
+
 struct Block_;
 typedef struct Block_ *Block;
 
@@ -49,8 +64,17 @@ typedef struct Stmt_ *Stmt;
 struct Item_;
 typedef struct Item_ *Item;
 
+struct TypeSimple_;
+typedef struct TypeSimple_ *TypeSimple;
+
 struct Type_;
 typedef struct Type_ *Type;
+
+struct FieldVal_;
+typedef struct FieldVal_ *FieldVal;
+
+struct Field_;
+typedef struct Field_ *Field;
 
 struct Expr_;
 typedef struct Expr_ *Expr;
@@ -81,14 +105,18 @@ Program make_Prog(ListTopDef p0);
 struct TopDef_
 {
   int line_number, char_number;
-  enum { is_FnDef } kind;
+  enum { is_FnDef, is_ClassDef, is_ClassDefExt } kind;
   union
   {
     struct { Block block_; Ident ident_; ListArg listarg_; Type type_; } fndef_;
+    struct { ClassBlock classblock_; Ident ident_; } classdef_;
+    struct { ClassBlock classblock_; Ident ident_1, ident_2; } classdefext_;
   } u;
 };
 
 TopDef make_FnDef(Type p0, Ident p1, ListArg p2, Block p3);
+TopDef make_ClassDef(Ident p0, ClassBlock p1);
+TopDef make_ClassDefExt(Ident p0, Ident p1, ClassBlock p2);
 
 struct ListTopDef_
 {
@@ -118,6 +146,48 @@ struct ListArg_
 
 ListArg make_ListArg(Arg p1, ListArg p2);
 
+struct ClassBlock_
+{
+  int line_number, char_number;
+  enum { is_ClassBlk } kind;
+  union
+  {
+    struct { ListClassDecl listclassdecl_; } classblk_;
+  } u;
+};
+
+ClassBlock make_ClassBlk(ListClassDecl p0);
+
+struct ListClassDecl_
+{
+  ClassDecl classdecl_;
+  ListClassDecl listclassdecl_;
+};
+
+ListClassDecl make_ListClassDecl(ClassDecl p1, ListClassDecl p2);
+
+struct ClassDecl_
+{
+  int line_number, char_number;
+  enum { is_FieldDecl, is_MethodDecl } kind;
+  union
+  {
+    struct { ListIdent listident_; Type type_; } fielddecl_;
+    struct { Block block_; Ident ident_; ListArg listarg_; Type type_; } methoddecl_;
+  } u;
+};
+
+ClassDecl make_FieldDecl(Type p0, ListIdent p1);
+ClassDecl make_MethodDecl(Type p0, Ident p1, ListArg p2, Block p3);
+
+struct ListIdent_
+{
+  Ident ident_;
+  ListIdent listident_;
+};
+
+ListIdent make_ListIdent(Ident p1, ListIdent p2);
+
 struct Block_
 {
   int line_number, char_number;
@@ -141,18 +211,19 @@ ListStmt make_ListStmt(Stmt p1, ListStmt p2);
 struct Stmt_
 {
   int line_number, char_number;
-  enum { is_Empty, is_BStmt, is_Decl, is_Ass, is_Incr, is_Decr, is_Ret, is_VRet, is_Cond, is_CondElse, is_While, is_SExp } kind;
+  enum { is_Empty, is_BStmt, is_Decl, is_Ass, is_Incr, is_Decr, is_Ret, is_VRet, is_Cond, is_CondElse, is_While, is_For, is_SExp } kind;
   union
   {
     struct { Block block_; } bstmt_;
     struct { ListItem listitem_; Type type_; } decl_;
-    struct { Expr expr_; Ident ident_; } ass_;
-    struct { Ident ident_; } incr_;
-    struct { Ident ident_; } decr_;
+    struct { Expr expr_1, expr_2; } ass_;
+    struct { Expr expr_; } incr_;
+    struct { Expr expr_; } decr_;
     struct { Expr expr_; } ret_;
     struct { Expr expr_; Stmt stmt_; } cond_;
     struct { Expr expr_; Stmt stmt_1, stmt_2; } condelse_;
     struct { Expr expr_; Stmt stmt_; } while_;
+    struct { Expr expr_; Ident ident_; Stmt stmt_; TypeSimple typesimple_; } for_;
     struct { Expr expr_; } sexp_;
   } u;
 };
@@ -160,14 +231,15 @@ struct Stmt_
 Stmt make_Empty(void);
 Stmt make_BStmt(Block p0);
 Stmt make_Decl(Type p0, ListItem p1);
-Stmt make_Ass(Ident p0, Expr p1);
-Stmt make_Incr(Ident p0);
-Stmt make_Decr(Ident p0);
+Stmt make_Ass(Expr p0, Expr p1);
+Stmt make_Incr(Expr p0);
+Stmt make_Decr(Expr p0);
 Stmt make_Ret(Expr p0);
 Stmt make_VRet(void);
 Stmt make_Cond(Expr p0, Stmt p1);
 Stmt make_CondElse(Expr p0, Stmt p1, Stmt p2);
 Stmt make_While(Expr p0, Stmt p1);
+Stmt make_For(TypeSimple p0, Ident p1, Expr p2, Stmt p3);
 Stmt make_SExp(Expr p0);
 
 struct Item_
@@ -192,21 +264,35 @@ struct ListItem_
 
 ListItem make_ListItem(Item p1, ListItem p2);
 
-struct Type_
+struct TypeSimple_
 {
   int line_number, char_number;
-  enum { is_Int, is_Str, is_Bool, is_Void, is_Fun } kind;
+  enum { is_Int, is_Str, is_Bool, is_Class } kind;
   union
   {
-    struct { ListType listtype_; Type type_; } fun_;
+    struct { Ident ident_; } class_;
   } u;
 };
 
-Type make_Int(void);
-Type make_Str(void);
-Type make_Bool(void);
+TypeSimple make_Int(void);
+TypeSimple make_Str(void);
+TypeSimple make_Bool(void);
+TypeSimple make_Class(Ident p0);
+
+struct Type_
+{
+  int line_number, char_number;
+  enum { is_Void, is_SingleType, is_ArrayType } kind;
+  union
+  {
+    struct { TypeSimple typesimple_; } singletype_;
+    struct { TypeSimple typesimple_; } arraytype_;
+  } u;
+};
+
 Type make_Void(void);
-Type make_Fun(Type p0, ListType p1);
+Type make_SingleType(TypeSimple p0);
+Type make_ArrayType(TypeSimple p0);
 
 struct ListType_
 {
@@ -216,15 +302,58 @@ struct ListType_
 
 ListType make_ListType(Type p1, ListType p2);
 
+struct FieldVal_
+{
+  int line_number, char_number;
+  enum { is_FieldValCall, is_FieldValSingle } kind;
+  union
+  {
+    struct { Ident ident_; ListExpr listexpr_; } fieldvalcall_;
+    struct { Ident ident_; } fieldvalsingle_;
+  } u;
+};
+
+FieldVal make_FieldValCall(Ident p0, ListExpr p1);
+FieldVal make_FieldValSingle(Ident p0);
+
+struct Field_
+{
+  int line_number, char_number;
+  enum { is_FieldSingle, is_FieldArray, is_FieldSelf } kind;
+  union
+  {
+    struct { FieldVal fieldval_; } fieldsingle_;
+    struct { Expr expr_; FieldVal fieldval_; } fieldarray_;
+  } u;
+};
+
+Field make_FieldSingle(FieldVal p0);
+Field make_FieldArray(FieldVal p0, Expr p1);
+Field make_FieldSelf(void);
+
+struct ListField_
+{
+  Field field_;
+  ListField listfield_;
+};
+
+ListField make_ListField(Field p1, ListField p2);
+
 struct Expr_
 {
   int line_number, char_number;
-  enum { is_EVar, is_ELitInt, is_ELitTrue, is_ELitFalse, is_EApp, is_EString, is_Neg, is_Not, is_EMul, is_EAdd, is_ERel, is_EAnd, is_EOr } kind;
+  enum { is_ENewObject, is_ENewArray, is_ETmpVar, is_ETmpArrayElem, is_ETmpArrayElemVar, is_ECastedNull, is_ECastedArrNull, is_EVar, is_ELitInt, is_ELitTrue, is_ELitFalse, is_EString, is_Neg, is_Not, is_EMul, is_EAdd, is_ERel, is_EAnd, is_EOr } kind;
   union
   {
-    struct { Ident ident_; } evar_;
+    struct { Ident ident_; } enewobject_;
+    struct { Expr expr_; TypeSimple typesimple_; } enewarray_;
+    struct { Expr expr_; ListField listfield_; } etmpvar_;
+    struct { Expr expr_1, expr_2; } etmparrayelem_;
+    struct { Expr expr_1, expr_2; ListField listfield_; } etmparrayelemvar_;
+    struct { Expr expr_; } ecastednull_;
+    struct { TypeSimple typesimple_; } ecastedarrnull_;
+    struct { ListField listfield_; } evar_;
     struct { Integer integer_; } elitint_;
-    struct { Ident ident_; ListExpr listexpr_; } eapp_;
     struct { String string_; } estring_;
     struct { Expr expr_; } neg_;
     struct { Expr expr_; } not_;
@@ -236,11 +365,17 @@ struct Expr_
   } u;
 };
 
-Expr make_EVar(Ident p0);
+Expr make_ENewObject(Ident p0);
+Expr make_ENewArray(TypeSimple p0, Expr p1);
+Expr make_ETmpVar(Expr p0, ListField p1);
+Expr make_ETmpArrayElem(Expr p0, Expr p1);
+Expr make_ETmpArrayElemVar(Expr p0, Expr p1, ListField p2);
+Expr make_ECastedNull(Expr p0);
+Expr make_ECastedArrNull(TypeSimple p0);
+Expr make_EVar(ListField p0);
 Expr make_ELitInt(Integer p0);
 Expr make_ELitTrue(void);
 Expr make_ELitFalse(void);
-Expr make_EApp(Ident p0, ListExpr p1);
 Expr make_EString(String p0);
 Expr make_Neg(Expr p0);
 Expr make_Not(Expr p0);

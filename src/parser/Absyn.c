@@ -37,6 +37,39 @@ TopDef make_FnDef(Type p1, Ident p2, ListArg p3, Block p4)
     return tmp;
 }
 
+/********************   ClassDef    ********************/
+
+TopDef make_ClassDef(Ident p1, ClassBlock p2)
+{
+    TopDef tmp = (TopDef) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ClassDef!\n");
+        exit(1);
+    }
+    tmp->kind = is_ClassDef;
+    tmp->u.classdef_.ident_ = p1;
+    tmp->u.classdef_.classblock_ = p2;
+    return tmp;
+}
+
+/********************   ClassDefExt    ********************/
+
+TopDef make_ClassDefExt(Ident p1, Ident p2, ClassBlock p3)
+{
+    TopDef tmp = (TopDef) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ClassDefExt!\n");
+        exit(1);
+    }
+    tmp->kind = is_ClassDefExt;
+    tmp->u.classdefext_.ident_1 = p1;
+    tmp->u.classdefext_.ident_2 = p2;
+    tmp->u.classdefext_.classblock_ = p3;
+    return tmp;
+}
+
 /********************   ListTopDef    ********************/
 
 ListTopDef make_ListTopDef(TopDef p1, ListTopDef p2)
@@ -80,6 +113,85 @@ ListArg make_ListArg(Arg p1, ListArg p2)
     }
     tmp->arg_ = p1;
     tmp->listarg_ = p2;
+    return tmp;
+}
+
+/********************   ClassBlk    ********************/
+
+ClassBlock make_ClassBlk(ListClassDecl p1)
+{
+    ClassBlock tmp = (ClassBlock) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ClassBlk!\n");
+        exit(1);
+    }
+    tmp->kind = is_ClassBlk;
+    tmp->u.classblk_.listclassdecl_ = p1;
+    return tmp;
+}
+
+/********************   ListClassDecl    ********************/
+
+ListClassDecl make_ListClassDecl(ClassDecl p1, ListClassDecl p2)
+{
+    ListClassDecl tmp = (ListClassDecl) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ListClassDecl!\n");
+        exit(1);
+    }
+    tmp->classdecl_ = p1;
+    tmp->listclassdecl_ = p2;
+    return tmp;
+}
+
+/********************   FieldDecl    ********************/
+
+ClassDecl make_FieldDecl(Type p1, ListIdent p2)
+{
+    ClassDecl tmp = (ClassDecl) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating FieldDecl!\n");
+        exit(1);
+    }
+    tmp->kind = is_FieldDecl;
+    tmp->u.fielddecl_.type_ = p1;
+    tmp->u.fielddecl_.listident_ = p2;
+    return tmp;
+}
+
+/********************   MethodDecl    ********************/
+
+ClassDecl make_MethodDecl(Type p1, Ident p2, ListArg p3, Block p4)
+{
+    ClassDecl tmp = (ClassDecl) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating MethodDecl!\n");
+        exit(1);
+    }
+    tmp->kind = is_MethodDecl;
+    tmp->u.methoddecl_.type_ = p1;
+    tmp->u.methoddecl_.ident_ = p2;
+    tmp->u.methoddecl_.listarg_ = p3;
+    tmp->u.methoddecl_.block_ = p4;
+    return tmp;
+}
+
+/********************   ListIdent    ********************/
+
+ListIdent make_ListIdent(Ident p1, ListIdent p2)
+{
+    ListIdent tmp = (ListIdent) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ListIdent!\n");
+        exit(1);
+    }
+    tmp->ident_ = p1;
+    tmp->listident_ = p2;
     return tmp;
 }
 
@@ -160,7 +272,7 @@ Stmt make_Decl(Type p1, ListItem p2)
 
 /********************   Ass    ********************/
 
-Stmt make_Ass(Ident p1, Expr p2)
+Stmt make_Ass(Expr p1, Expr p2)
 {
     Stmt tmp = (Stmt) malloc(sizeof(*tmp));
     if (!tmp)
@@ -169,14 +281,14 @@ Stmt make_Ass(Ident p1, Expr p2)
         exit(1);
     }
     tmp->kind = is_Ass;
-    tmp->u.ass_.ident_ = p1;
-    tmp->u.ass_.expr_ = p2;
+    tmp->u.ass_.expr_1 = p1;
+    tmp->u.ass_.expr_2 = p2;
     return tmp;
 }
 
 /********************   Incr    ********************/
 
-Stmt make_Incr(Ident p1)
+Stmt make_Incr(Expr p1)
 {
     Stmt tmp = (Stmt) malloc(sizeof(*tmp));
     if (!tmp)
@@ -185,13 +297,13 @@ Stmt make_Incr(Ident p1)
         exit(1);
     }
     tmp->kind = is_Incr;
-    tmp->u.incr_.ident_ = p1;
+    tmp->u.incr_.expr_ = p1;
     return tmp;
 }
 
 /********************   Decr    ********************/
 
-Stmt make_Decr(Ident p1)
+Stmt make_Decr(Expr p1)
 {
     Stmt tmp = (Stmt) malloc(sizeof(*tmp));
     if (!tmp)
@@ -200,7 +312,7 @@ Stmt make_Decr(Ident p1)
         exit(1);
     }
     tmp->kind = is_Decr;
-    tmp->u.decr_.ident_ = p1;
+    tmp->u.decr_.expr_ = p1;
     return tmp;
 }
 
@@ -282,6 +394,24 @@ Stmt make_While(Expr p1, Stmt p2)
     return tmp;
 }
 
+/********************   For    ********************/
+
+Stmt make_For(TypeSimple p1, Ident p2, Expr p3, Stmt p4)
+{
+    Stmt tmp = (Stmt) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating For!\n");
+        exit(1);
+    }
+    tmp->kind = is_For;
+    tmp->u.for_.typesimple_ = p1;
+    tmp->u.for_.ident_ = p2;
+    tmp->u.for_.expr_ = p3;
+    tmp->u.for_.stmt_ = p4;
+    return tmp;
+}
+
 /********************   SExp    ********************/
 
 Stmt make_SExp(Expr p1)
@@ -345,9 +475,9 @@ ListItem make_ListItem(Item p1, ListItem p2)
 
 /********************   Int    ********************/
 
-Type make_Int()
+TypeSimple make_Int()
 {
-    Type tmp = (Type) malloc(sizeof(*tmp));
+    TypeSimple tmp = (TypeSimple) malloc(sizeof(*tmp));
     if (!tmp)
     {
         fprintf(stderr, "Error: out of memory when allocating Int!\n");
@@ -359,9 +489,9 @@ Type make_Int()
 
 /********************   Str    ********************/
 
-Type make_Str()
+TypeSimple make_Str()
 {
-    Type tmp = (Type) malloc(sizeof(*tmp));
+    TypeSimple tmp = (TypeSimple) malloc(sizeof(*tmp));
     if (!tmp)
     {
         fprintf(stderr, "Error: out of memory when allocating Str!\n");
@@ -373,15 +503,30 @@ Type make_Str()
 
 /********************   Bool    ********************/
 
-Type make_Bool()
+TypeSimple make_Bool()
 {
-    Type tmp = (Type) malloc(sizeof(*tmp));
+    TypeSimple tmp = (TypeSimple) malloc(sizeof(*tmp));
     if (!tmp)
     {
         fprintf(stderr, "Error: out of memory when allocating Bool!\n");
         exit(1);
     }
     tmp->kind = is_Bool;
+    return tmp;
+}
+
+/********************   Class    ********************/
+
+TypeSimple make_Class(Ident p1)
+{
+    TypeSimple tmp = (TypeSimple) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating Class!\n");
+        exit(1);
+    }
+    tmp->kind = is_Class;
+    tmp->u.class_.ident_ = p1;
     return tmp;
 }
 
@@ -399,19 +544,33 @@ Type make_Void()
     return tmp;
 }
 
-/********************   Fun    ********************/
+/********************   SingleType    ********************/
 
-Type make_Fun(Type p1, ListType p2)
+Type make_SingleType(TypeSimple p1)
 {
     Type tmp = (Type) malloc(sizeof(*tmp));
     if (!tmp)
     {
-        fprintf(stderr, "Error: out of memory when allocating Fun!\n");
+        fprintf(stderr, "Error: out of memory when allocating SingleType!\n");
         exit(1);
     }
-    tmp->kind = is_Fun;
-    tmp->u.fun_.type_ = p1;
-    tmp->u.fun_.listtype_ = p2;
+    tmp->kind = is_SingleType;
+    tmp->u.singletype_.typesimple_ = p1;
+    return tmp;
+}
+
+/********************   ArrayType    ********************/
+
+Type make_ArrayType(TypeSimple p1)
+{
+    Type tmp = (Type) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ArrayType!\n");
+        exit(1);
+    }
+    tmp->kind = is_ArrayType;
+    tmp->u.arraytype_.typesimple_ = p1;
     return tmp;
 }
 
@@ -430,9 +589,210 @@ ListType make_ListType(Type p1, ListType p2)
     return tmp;
 }
 
+/********************   FieldValCall    ********************/
+
+FieldVal make_FieldValCall(Ident p1, ListExpr p2)
+{
+    FieldVal tmp = (FieldVal) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating FieldValCall!\n");
+        exit(1);
+    }
+    tmp->kind = is_FieldValCall;
+    tmp->u.fieldvalcall_.ident_ = p1;
+    tmp->u.fieldvalcall_.listexpr_ = p2;
+    return tmp;
+}
+
+/********************   FieldValSingle    ********************/
+
+FieldVal make_FieldValSingle(Ident p1)
+{
+    FieldVal tmp = (FieldVal) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating FieldValSingle!\n");
+        exit(1);
+    }
+    tmp->kind = is_FieldValSingle;
+    tmp->u.fieldvalsingle_.ident_ = p1;
+    return tmp;
+}
+
+/********************   FieldSingle    ********************/
+
+Field make_FieldSingle(FieldVal p1)
+{
+    Field tmp = (Field) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating FieldSingle!\n");
+        exit(1);
+    }
+    tmp->kind = is_FieldSingle;
+    tmp->u.fieldsingle_.fieldval_ = p1;
+    return tmp;
+}
+
+/********************   FieldArray    ********************/
+
+Field make_FieldArray(FieldVal p1, Expr p2)
+{
+    Field tmp = (Field) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating FieldArray!\n");
+        exit(1);
+    }
+    tmp->kind = is_FieldArray;
+    tmp->u.fieldarray_.fieldval_ = p1;
+    tmp->u.fieldarray_.expr_ = p2;
+    return tmp;
+}
+
+/********************   FieldSelf    ********************/
+
+Field make_FieldSelf()
+{
+    Field tmp = (Field) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating FieldSelf!\n");
+        exit(1);
+    }
+    tmp->kind = is_FieldSelf;
+    return tmp;
+}
+
+/********************   ListField    ********************/
+
+ListField make_ListField(Field p1, ListField p2)
+{
+    ListField tmp = (ListField) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ListField!\n");
+        exit(1);
+    }
+    tmp->field_ = p1;
+    tmp->listfield_ = p2;
+    return tmp;
+}
+
+/********************   ENewObject    ********************/
+
+Expr make_ENewObject(Ident p1)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ENewObject!\n");
+        exit(1);
+    }
+    tmp->kind = is_ENewObject;
+    tmp->u.enewobject_.ident_ = p1;
+    return tmp;
+}
+
+/********************   ENewArray    ********************/
+
+Expr make_ENewArray(TypeSimple p1, Expr p2)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ENewArray!\n");
+        exit(1);
+    }
+    tmp->kind = is_ENewArray;
+    tmp->u.enewarray_.typesimple_ = p1;
+    tmp->u.enewarray_.expr_ = p2;
+    return tmp;
+}
+
+/********************   ETmpVar    ********************/
+
+Expr make_ETmpVar(Expr p1, ListField p2)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ETmpVar!\n");
+        exit(1);
+    }
+    tmp->kind = is_ETmpVar;
+    tmp->u.etmpvar_.expr_ = p1;
+    tmp->u.etmpvar_.listfield_ = p2;
+    return tmp;
+}
+
+/********************   ETmpArrayElem    ********************/
+
+Expr make_ETmpArrayElem(Expr p1, Expr p2)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ETmpArrayElem!\n");
+        exit(1);
+    }
+    tmp->kind = is_ETmpArrayElem;
+    tmp->u.etmparrayelem_.expr_1 = p1;
+    tmp->u.etmparrayelem_.expr_2 = p2;
+    return tmp;
+}
+
+/********************   ETmpArrayElemVar    ********************/
+
+Expr make_ETmpArrayElemVar(Expr p1, Expr p2, ListField p3)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ETmpArrayElemVar!\n");
+        exit(1);
+    }
+    tmp->kind = is_ETmpArrayElemVar;
+    tmp->u.etmparrayelemvar_.expr_1 = p1;
+    tmp->u.etmparrayelemvar_.expr_2 = p2;
+    tmp->u.etmparrayelemvar_.listfield_ = p3;
+    return tmp;
+}
+
+/********************   ECastedNull    ********************/
+
+Expr make_ECastedNull(Expr p1)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ECastedNull!\n");
+        exit(1);
+    }
+    tmp->kind = is_ECastedNull;
+    tmp->u.ecastednull_.expr_ = p1;
+    return tmp;
+}
+
+/********************   ECastedArrNull    ********************/
+
+Expr make_ECastedArrNull(TypeSimple p1)
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ECastedArrNull!\n");
+        exit(1);
+    }
+    tmp->kind = is_ECastedArrNull;
+    tmp->u.ecastedarrnull_.typesimple_ = p1;
+    return tmp;
+}
+
 /********************   EVar    ********************/
 
-Expr make_EVar(Ident p1)
+Expr make_EVar(ListField p1)
 {
     Expr tmp = (Expr) malloc(sizeof(*tmp));
     if (!tmp)
@@ -441,7 +801,7 @@ Expr make_EVar(Ident p1)
         exit(1);
     }
     tmp->kind = is_EVar;
-    tmp->u.evar_.ident_ = p1;
+    tmp->u.evar_.listfield_ = p1;
     return tmp;
 }
 
@@ -485,22 +845,6 @@ Expr make_ELitFalse()
         exit(1);
     }
     tmp->kind = is_ELitFalse;
-    return tmp;
-}
-
-/********************   EApp    ********************/
-
-Expr make_EApp(Ident p1, ListExpr p2)
-{
-    Expr tmp = (Expr) malloc(sizeof(*tmp));
-    if (!tmp)
-    {
-        fprintf(stderr, "Error: out of memory when allocating EApp!\n");
-        exit(1);
-    }
-    tmp->kind = is_EApp;
-    tmp->u.eapp_.ident_ = p1;
-    tmp->u.eapp_.listexpr_ = p2;
     return tmp;
 }
 

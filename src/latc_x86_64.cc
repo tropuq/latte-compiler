@@ -4,14 +4,14 @@ extern "C" {
 #include "parser/Parser.h"
 }
 
-#include "backend/asm/gen_asm.hh"
-#include "backend/ic/control_flow_graph.hh"
-#include "backend/ic/gen_ic.hh"
+// #include "backend/asm/gen_asm.hh"
+// #include "backend/ic/control_flow_graph.hh"
+// #include "backend/ic/gen_ic.hh"
 #include "core/code_pos.hh"
 #include "core/compilation_errors.hh"
 #include "core/tree_types.hh"
-#include "frontend/simplifier.hh"
-#include "frontend/verifier.hh"
+// #include "frontend/simplifier.hh"
+// #include "frontend/verifier.hh"
 #include "parser/convert.hh"
 #include "utils/code_printer.hh"
 
@@ -65,18 +65,19 @@ struct out_filenames {
 };
 
 void compile(latte::core::program::uptr &prog, out_filenames f) {
-	latte::frontend::verify_program(prog);
-	latte::frontend::simplify_program(prog);
-	auto qcode = latte::backend::convert_to_quad_prog(prog);
-	std::vector<latte::backend::control_flow_graph> cfgs;
-	for (auto &f : qcode.funcs)
-		cfgs.emplace_back(latte::backend::control_flow_graph(f));
-	auto asm_code = latte::backend::gen_asm_for_prog(cfgs);
+	std::cerr << prog << std::endl;
+	// latte::frontend::verify_program(prog);
+	// latte::frontend::simplify_program(prog);
+	// auto qcode = latte::backend::convert_to_quad_prog(prog);
+	// std::vector<latte::backend::control_flow_graph> cfgs;
+	// for (auto &f : qcode.funcs)
+	// 	cfgs.emplace_back(latte::backend::control_flow_graph(f));
+	// auto asm_code = latte::backend::gen_asm_for_prog(cfgs);
 
-	std::fstream out(f.code_name, std::ios::out);
-	out << asm_code << std::endl;
-	system(concat("nasm -felf64 ", f.code_name, " && ld ", f.obj_name,
-		" lib/runtime.o -lc --dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o ", f.exec_name).c_str());
+	// std::fstream out(f.code_name, std::ios::out);
+	// out << asm_code << std::endl;
+	// system(concat("nasm -felf64 ", f.code_name, " && ld ", f.obj_name,
+	// 	" lib/runtime.o -lc --dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o ", f.exec_name).c_str());
 }
 
 } // namespace
