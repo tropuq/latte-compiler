@@ -30,7 +30,8 @@ struct type : tree_node {
 		struct class_type {
 			ident id;
 		};
-		using val_type = std::variant<type_enum, class_type>;
+		struct null_type {};
+		using val_type = std::variant<type_enum, class_type, null_type>;
 		val_type val;
 	};
 	struct array_type {
@@ -48,6 +49,9 @@ inline bool operator==(const type::single_type &a, const type::single_type &b) {
 		},
 		[](const st::class_type &ta, const st::class_type &tb) {
 			return ta.id == tb.id;
+		},
+		[](const st::null_type &, const st::null_type &) {
+			return true;
 		},
 		[](auto &, auto &) {
 			return false;
@@ -272,11 +276,12 @@ struct exp : tree_node {
 			NEG,
 		} op;
 	};
-	struct null {
+	struct null_casted {
 		using tp_type = std::variant<type::single_type::class_type, type::array_type>;
 		tp_type tp;
 	};
-	std::variant<nested_var, binary, unary, null, int, bool, std::string> val;
+	struct null {};
+	std::variant<nested_var, binary, unary, null_casted, null, int, bool, std::string> val;
 };
 
 inline bool is_bool_oper(exp::binary::op_type op) {
@@ -379,7 +384,7 @@ inline exp::binary::bool_op_type negate_oper(exp::binary::bool_op_type op) {
 
 } // namespace latte::core
 
-inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type::type_enum tp) {
+inline std::ostream& operator<<(std::ostream& ost, const latte::core::type::single_type::type_enum &tp) {
 	using type_enum = latte::core::type::single_type::type_enum;
 	switch (tp) {
 	case type_enum::INT: return ost << "int";
@@ -390,16 +395,20 @@ inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_typ
 	assert(false);
 }
 
-inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type::class_type tp) {
+inline std::ostream& operator<<(std::ostream& ost, const latte::core::type::single_type::class_type &tp) {
 	return ost << "<" << tp.id << ">";
 
 }
 
-inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type tp) {
+inline std::ostream& operator<<(std::ostream& ost, const latte::core::type::single_type::null_type &) {
+	return ost << "null_type";
+}
+
+inline std::ostream& operator<<(std::ostream& ost, const latte::core::type::single_type &tp) {
 	return ost << tp.val;
 }
 
-inline std::ostream& operator<<(std::ostream& ost, latte::core::type::array_type tp) {
+inline std::ostream& operator<<(std::ostream& ost, const latte::core::type::array_type &tp) {
 	return ost << tp.val.val << "[]";
 }
 
@@ -454,8 +463,12 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::block::upt
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::stmt::uptr &st);
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::uptr &e);
 
-inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::null &e) {
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::null_casted &e) {
 	return ost << e.tp << " null";
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::null &) {
+	return ost << "null";
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binary &e) {

@@ -107,6 +107,7 @@ ETmpArrayElemVar. Expr6 ::= "(" Expr ")" "[" Expr "]" "." [Field] ;
 -- Need to check if Expr = Ident
 ECastedNull.    Expr6 ::= "(" Expr ")" "null" ;
 ECastedArrNull. Expr6 ::= "(" TypeSimple "[]" ")" "null" ;
+ENull.          Expr6 ::= "null" ;
 
 EVar.      Expr6 ::= [Field] ;
 

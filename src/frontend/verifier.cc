@@ -243,12 +243,19 @@ std::optional<type::single_type::class_type> try_get_class_tp(type::val_type t) 
 bool can_convert_type(const type::val_type &from, const type::val_type &to, verifier_data &vf_data) {
 	if (from == to)
 		return true;
-	auto from_class = try_get_class_tp(from);
-	if (!from_class)
-		return false;
 	auto to_class = try_get_class_tp(to);
-	if (!to_class)
+	auto is_from_null_type = from == type::single_type {type::single_type::null_type {}};
+	if (!to_class) {
+		if (is_from_null_type && std::holds_alternative<type::array_type>(to))
+			return true;
 		return false;
+	}
+	auto from_class = try_get_class_tp(from);
+	if (!from_class) {
+		if (is_from_null_type)
+			return true;
+		return false;
+	}
 	return vf_data.cls_map.does_class_extend(from_class->id, to_class->id);
 }
 
@@ -271,6 +278,7 @@ void verify_call_args(func *func, func_call &call, verifier_data &vf_data, code_
 
 void verify_single_type(const type::single_type &t, verifier_data &vf_data) {
 	std::visit(overloaded {
+		[](const type::single_type::null_type &) {},
 		[](const type::single_type::type_enum &) {},
 		[&](const type::single_type::class_type &c) {
 			if (!vf_data.cls_map.does_class_exists(c.id))
@@ -458,6 +466,12 @@ type::val_type verify_exp_code(exp::uptr &ex, verifier_data &vf_data) {
 							throw compilation_error(e.e1->pos, concat("invalid operator '", e.op,
 								"' in binary expression with expressions of type '", tp, "'"));
 						},
+						[&e, is_eq_neq](type::single_type::null_type &tp) {
+							if (is_eq_neq)
+								return type::single_type::type_enum::BOOL;
+							throw compilation_error(e.e1->pos, concat("invalid operator '", e.op,
+								"' in binary expression with expressions of type '", tp, "'"));
+						}
 					}, tp.val);
 				},
 				[&e, is_eq_neq](type::array_type &tp) {
@@ -486,8 +500,11 @@ type::val_type verify_exp_code(exp::uptr &ex, verifier_data &vf_data) {
 						expected_type, "' instead of '", exp_tp, "'"));
 			return exp_tp;
 		},
-		[&](exp::null &e) -> type::val_type {
+		[&](exp::null_casted &e) -> type::val_type {
 			return convert_to_val_type(e.tp);
+		},
+		[&](exp::null &) -> type::val_type {
+			return type::single_type {type::single_type::null_type {}};
 		},
 		[&](int &) -> type::val_type {
 			return type::single_type {type::single_type::type_enum::INT};

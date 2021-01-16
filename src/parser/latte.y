@@ -367,6 +367,7 @@ Expr6 : _SYMB_36 _IDENT_ { $$ = make_ENewObject($2); $$->line_number = @$.first_
   | _SYMB_0 Expr _SYMB_1 _SYMB_11 Expr _SYMB_12 _SYMB_13 ListField { $$ = make_ETmpArrayElemVar($2, $5, $8); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }
   | _SYMB_0 Expr _SYMB_1 _SYMB_37 { $$ = make_ECastedNull($2); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }
   | _SYMB_0 TypeSimple _SYMB_10 _SYMB_1 _SYMB_37 { $$ = make_ECastedArrNull($2); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }
+  | _SYMB_37 { $$ = make_ENull(); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }
   | ListField { $$ = make_EVar($1); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }
   | _INTEGER_ { $$ = make_ELitInt($1); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }
   | _SYMB_41 { $$ = make_ELitTrue(); $$->line_number = @$.first_line; $$->char_number = @$.first_column;  }

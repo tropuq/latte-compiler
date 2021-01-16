@@ -523,15 +523,18 @@ exp::uptr convert_expr(Expr p) {
 			.expr_->u.evar_
 			.listfield_->field_->u.fieldsingle_
 			.fieldval_->u.fieldvalsingle_.ident_);
-		ret->val = exp::null {type::single_type::class_type {
+		ret->val = exp::null_casted {type::single_type::class_type {
 			std::move(class_id)
 		}};
 		break;
 	}
 	case Expr_::is_ECastedArrNull:
-		ret->val = exp::null {type::array_type {
+		ret->val = exp::null_casted {type::array_type {
 			get_single_type(p->u.ecastedarrnull_.typesimple_)}
 		};
+		break;
+	case Expr_::is_ENull:
+		ret->val = exp::null {};
 		break;
 	case Expr_::is_EVar: {
 		auto fields = convert_list_field(p->u.evar_.listfield_);

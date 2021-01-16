@@ -790,6 +790,20 @@ Expr make_ECastedArrNull(TypeSimple p1)
     return tmp;
 }
 
+/********************   ENull    ********************/
+
+Expr make_ENull()
+{
+    Expr tmp = (Expr) malloc(sizeof(*tmp));
+    if (!tmp)
+    {
+        fprintf(stderr, "Error: out of memory when allocating ENull!\n");
+        exit(1);
+    }
+    tmp->kind = is_ENull;
+    return tmp;
+}
+
 /********************   EVar    ********************/
 
 Expr make_EVar(ListField p1)

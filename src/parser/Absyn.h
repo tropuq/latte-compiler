@@ -342,7 +342,7 @@ ListField make_ListField(Field p1, ListField p2);
 struct Expr_
 {
   int line_number, char_number;
-  enum { is_ENewObject, is_ENewArray, is_ETmpVar, is_ETmpArrayElem, is_ETmpArrayElemVar, is_ECastedNull, is_ECastedArrNull, is_EVar, is_ELitInt, is_ELitTrue, is_ELitFalse, is_EString, is_Neg, is_Not, is_EMul, is_EAdd, is_ERel, is_EAnd, is_EOr } kind;
+  enum { is_ENewObject, is_ENewArray, is_ETmpVar, is_ETmpArrayElem, is_ETmpArrayElemVar, is_ECastedNull, is_ECastedArrNull, is_ENull, is_EVar, is_ELitInt, is_ELitTrue, is_ELitFalse, is_EString, is_Neg, is_Not, is_EMul, is_EAdd, is_ERel, is_EAnd, is_EOr } kind;
   union
   {
     struct { Ident ident_; } enewobject_;
@@ -372,6 +372,7 @@ Expr make_ETmpArrayElem(Expr p0, Expr p1);
 Expr make_ETmpArrayElemVar(Expr p0, Expr p1, ListField p2);
 Expr make_ECastedNull(Expr p0);
 Expr make_ECastedArrNull(TypeSimple p0);
+Expr make_ENull(void);
 Expr make_EVar(ListField p0);
 Expr make_ELitInt(Integer p0);
 Expr make_ELitTrue(void);
