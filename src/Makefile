@@ -2,7 +2,7 @@ CC = gcc
 CXX = g++ -std=c++17
 CCFLAGS = -g -Wall -Wextra -fdiagnostics-color=always -I./
 
-OBJS = Absyn.o Lexer.o Parser.o convert.o \
+OBJS = Absyn.o Lexer.o Parser.o convert.o verifier.o \
 	code_printer.o
 
 .PHONY : clean
@@ -28,7 +28,7 @@ latc_x86_64.o: latc_x86_64.cc parser/Parser.h parser/Absyn.h \
  core/tree_types.hh \
  core/code_pos.hh utils/utils.hh \
  core/compilation_errors.hh utils/code_printer.hh utils/colors.hh \
- parser/convert.hh
+ frontend/verifier.hh parser/convert.hh
 	${CXX} ${CCFLAGS} -c latc_x86_64.cc
 
 convert.o: parser/convert.cc parser/convert.hh parser/Absyn.h \

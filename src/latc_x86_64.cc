@@ -11,7 +11,7 @@ extern "C" {
 #include "core/compilation_errors.hh"
 #include "core/tree_types.hh"
 // #include "frontend/simplifier.hh"
-// #include "frontend/verifier.hh"
+#include "frontend/verifier.hh"
 #include "parser/convert.hh"
 #include "utils/code_printer.hh"
 
@@ -65,8 +65,8 @@ struct out_filenames {
 };
 
 void compile(latte::core::program::uptr &prog, out_filenames f) {
-	std::cerr << prog << std::endl;
-	// latte::frontend::verify_program(prog);
+	// std::cerr << prog << std::endl;
+	latte::frontend::verify_program(prog);
 	// latte::frontend::simplify_program(prog);
 	// auto qcode = latte::backend::convert_to_quad_prog(prog);
 	// std::vector<latte::backend::control_flow_graph> cfgs;

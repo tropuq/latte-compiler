@@ -3,12 +3,13 @@
 #include "code_pos.hh"
 #include "utils/utils.hh"
 
-#include <vector>
-#include <variant>
-#include <string>
+#include <cassert>
+#include <functional>
 #include <memory>
 #include <optional>
-#include <functional>
+#include <string>
+#include <variant>
+#include <vector>
 
 namespace latte::core {
 
@@ -39,6 +40,62 @@ struct type : tree_node {
 	val_type val;
 };
 
+inline bool operator==(const type::single_type &a, const type::single_type &b) {
+	using st = type::single_type;
+	return std::visit(overloaded {
+		[](const st::type_enum &ta, const st::type_enum &tb) {
+			return ta == tb;
+		},
+		[](const st::class_type &ta, const st::class_type &tb) {
+			return ta.id == tb.id;
+		},
+		[](auto &, auto &) {
+			return false;
+		}
+	}, a.val, b.val);
+}
+
+inline bool operator!=(const type::single_type &a, const type::single_type &b) {
+	return !(a == b);
+}
+
+inline bool operator==(const type::array_type &a, const type::array_type &b) {
+	return a.val == b.val;
+}
+
+inline bool operator!=(const type::array_type &a, const type::array_type &b) {
+	return !(a == b);
+}
+
+inline bool operator==(const type::val_type &a, const type::val_type &b) {
+	return std::visit(overloaded {
+		[](const type::single_type &ta, const type::single_type &tb) {
+			return ta == tb;
+		},
+		[](const type::array_type &ta, const type::array_type &tb) {
+			return ta == tb;
+		},
+		[](auto &, auto &) {
+			return false;
+		}
+	}, a, b);
+}
+
+inline bool operator!=(const type::val_type &a, const type::val_type &b) {
+	return !(a == b);
+}
+
+inline type::single_type get_single_type(const type::val_type &tp) {
+	return std::visit(overloaded {
+		[&](type::single_type t) {
+			return t;
+		},
+		[&](type::array_type t) {
+			return t.val;
+		}
+	}, tp);
+}
+
 struct arg : tree_node {
 	ident id;
 	type tp;
@@ -57,8 +114,8 @@ struct stmt;
 
 struct program : tree_node {
 	using uptr = std::unique_ptr<program>;
-	using glob_def_type = std::variant<std::unique_ptr<func>, std::unique_ptr<class_def>>;
-	std::vector<glob_def_type> defs;
+	using def_type = std::variant<std::unique_ptr<func>, std::unique_ptr<class_def>>;
+	std::vector<def_type> defs;
 };
 
 struct class_def : tree_node {
@@ -67,10 +124,10 @@ struct class_def : tree_node {
 		ident id;
 		type tp;
 	};
-	using glob_def_type = std::variant<std::unique_ptr<func>, field>;
+	using def_type = std::variant<std::unique_ptr<func>, field>;
 	ident class_id;
 	std::optional<ident> extends_id;
-	std::vector<glob_def_type> defs;
+	std::vector<def_type> defs;
 };
 
 struct func : tree_node {
@@ -97,14 +154,34 @@ struct new_val {
 	std::optional<std::unique_ptr<core::exp>> arr_size; // if tp = array
 };
 
+inline type::val_type convert_to_val_type(const new_val::tp_type &tp) {
+	type::val_type ret;
+	std::visit(overloaded {
+		[&](const type::single_type::class_type &t) {
+			ret = type::single_type {.val = t};
+		},
+		[&](const type::array_type &a) {
+			ret = a;
+		}
+	}, tp);
+	return ret;
+}
+
 struct nested_var {
 	using field_ident = core::ident;
 	struct self {};
-	using base_type = std::variant<self, func_call, field_ident, new_val>;
+
+	struct base_type : tree_node {
+		using val_type = std::variant<self, func_call, field_ident, new_val>;
+		val_type val;
+	};
 	base_type base;
 
 	using array_pos = std::unique_ptr<core::exp>;
-	using field_type = std::variant<self, func_call, field_ident, array_pos>;
+	struct field_type : tree_node {
+		using val_type = std::variant<self, func_call, field_ident, array_pos>;
+		val_type val;
+	};
 	std::vector<field_type> fields;
 };
 
@@ -229,7 +306,7 @@ std::function<T(T,T)> get_oper_func(exp::binary::arithmetic_op_type op) {
 	case ar_op::DIV: return std::divides<T>();
 	case ar_op::MOD: return std::modulus<T>();
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 template<typename RET, typename ARG>
@@ -246,7 +323,7 @@ inline std::function<std::string(std::string,std::string)> get_oper_func(exp::bi
 	case ar_op::ADD: return std::plus<std::string>();
 	default: return do_nothing<std::string, std::string>();
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 template<typename T>
@@ -256,7 +333,7 @@ std::function<bool(T,T)> get_oper_func(exp::binary::bool_op_type op) {
 	case bool_op::AND: return std::logical_or<T>();
 	case bool_op::OR: return std::logical_and<T>();
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 template<>
@@ -275,7 +352,7 @@ std::function<bool(T,T)> get_oper_func(exp::binary::rel_op_type op) {
 	case rel_op::EQU: return std::equal_to<T>();
 	case rel_op::NE: return std::not_equal_to<T>();
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline exp::binary::rel_op_type negate_oper(exp::binary::rel_op_type op) {
@@ -288,7 +365,7 @@ inline exp::binary::rel_op_type negate_oper(exp::binary::rel_op_type op) {
 	case rel_op::EQU: return rel_op::NE;
 	case rel_op::NE: return rel_op::EQU;
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline exp::binary::bool_op_type negate_oper(exp::binary::bool_op_type op) {
@@ -297,7 +374,7 @@ inline exp::binary::bool_op_type negate_oper(exp::binary::bool_op_type op) {
 	case bool_op::AND: return bool_op::OR;
 	case bool_op::OR: return bool_op::AND;
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 } // namespace latte::core
@@ -310,7 +387,7 @@ inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_typ
 	case type_enum::BOOL: return ost << "boolean";
 	case type_enum::VOID: return ost << "void";
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline std::ostream& operator<<(std::ostream& ost, latte::core::type::single_type::class_type tp) {
@@ -339,7 +416,7 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binar
 	case arithmetic_op_type::DIV: return ost << "/";
 	case arithmetic_op_type::MOD: return ost << "%";
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binary::bool_op_type &op) {
@@ -348,7 +425,7 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binar
 	case bool_op_type::AND: return ost << "&&";
 	case bool_op_type::OR: return ost << "||";
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binary::rel_op_type &op) {
@@ -361,7 +438,7 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::exp::binar
 	case rel_op_type::EQU: return ost << "==";
 	case rel_op_type::NE: return ost << "!=";
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const enum latte::core::exp::unary::op_type &op) {
@@ -370,7 +447,7 @@ inline std::ostream &operator<<(std::ostream &ost, const enum latte::core::exp::
 	case unary_op_type::NOT: return ost << "!";
 	case unary_op_type::NEG: return ost << "-";
 	}
-	__builtin_unreachable();
+	assert(false);
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::block::uptr &bl);
@@ -428,13 +505,21 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::core::nested_var
 	return ost << "self";
 }
 
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::nested_var::base_type &b) {
+	return ost << b.val;
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::core::nested_var::field_type &f) {
+	return ost << f.val;
+}
+
 inline std::ostream &operator<<(std::ostream &ost, const latte::core::nested_var &v) {
-	if (!v.fields.empty() && std::holds_alternative<latte::core::new_val>(v.base))
+	if (!v.fields.empty() && std::holds_alternative<latte::core::new_val>(v.base.val))
 		ost << '(' << v.base << ')';
 	else
 		ost << v.base;
 	for (auto &f : v.fields) {
-		if (std::holds_alternative<latte::core::nested_var::array_pos>(f))
+		if (std::holds_alternative<latte::core::nested_var::array_pos>(f.val))
 			ost << '[' << f << ']';
 		else
 			ost << '.' << f ;

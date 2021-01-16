@@ -11,10 +11,10 @@ using namespace latte::core;
 
 namespace {
 
-program::glob_def_type convert_top_def(TopDef p);
-std::vector<program::glob_def_type> convert_list_top_def(ListTopDef listtopdef);
-void convert_class_def(ClassDecl p, std::vector<class_def::glob_def_type> &class_defs);
-std::vector<class_def::glob_def_type> convert_list_class_def(ListClassDecl listclassdecl);
+program::def_type convert_top_def(TopDef p);
+std::vector<program::def_type> convert_list_top_def(ListTopDef listtopdef);
+void convert_class_def(ClassDecl p, std::vector<class_def::def_type> &class_defs);
+std::vector<class_def::def_type> convert_list_class_def(ListClassDecl listclassdecl);
 arg convert_arg(Arg p);
 std::vector<arg> convert_list_arg(ListArg listarg);
 block::uptr convert_block(Block p);
@@ -28,6 +28,7 @@ void convert_field(Field field, std::vector<nested_var::field_type> &ret);
 std::vector<nested_var::field_type> convert_list_field(ListField listfield);
 nested_var::base_type convert_field_to_base(nested_var::field_type field);
 exp::uptr convert_expr(Expr p);
+nested_var::field_type convert_expr_to_field(Expr exp);
 std::vector<exp::uptr> convert_list_expr(ListExpr listexpr);
 exp::binary::arithmetic_op_type convert_add_op(AddOp p);
 exp::binary::arithmetic_op_type convert_mul_op(MulOp p);
@@ -60,7 +61,7 @@ program::uptr convert_program(Program p) {
 
 namespace {
 
-program::glob_def_type convert_top_def(TopDef p) {
+program::def_type convert_top_def(TopDef p) {
 	switch (p->kind) {
 	case TopDef_::is_FnDef: {
 		auto ret = std::make_unique<func>();
@@ -92,8 +93,8 @@ program::glob_def_type convert_top_def(TopDef p) {
 	}
 }
 
-std::vector<program::glob_def_type> convert_list_top_def(ListTopDef listtopdef) {
-	std::vector<program::glob_def_type> ret;
+std::vector<program::def_type> convert_list_top_def(ListTopDef listtopdef) {
+	std::vector<program::def_type> ret;
 	while (listtopdef != nullptr) {
 		ret.emplace_back(convert_top_def(listtopdef->topdef_));
 		listtopdef = listtopdef->listtopdef_;
@@ -101,7 +102,7 @@ std::vector<program::glob_def_type> convert_list_top_def(ListTopDef listtopdef) 
 	return ret;
 }
 
-void convert_class_def(ClassDecl p, std::vector<class_def::glob_def_type> &class_defs) {
+void convert_class_def(ClassDecl p, std::vector<class_def::def_type> &class_defs) {
 	switch (p->kind) {
 	case ClassDecl_::is_FieldDecl: {
 		auto listident = p->u.fielddecl_.listident_;
@@ -132,8 +133,8 @@ void convert_class_def(ClassDecl p, std::vector<class_def::glob_def_type> &class
 	}
 }
 
-std::vector<class_def::glob_def_type> convert_list_class_def(ListClassDecl listclassdecl) {
-	std::vector<class_def::glob_def_type> ret;
+std::vector<class_def::def_type> convert_list_class_def(ListClassDecl listclassdecl) {
+	std::vector<class_def::def_type> ret;
 	while (listclassdecl != nullptr) {
 		convert_class_def(listclassdecl->classdecl_, ret);
 		listclassdecl = listclassdecl->listclassdecl_;
@@ -207,7 +208,7 @@ stmt::uptr convert_stmt(Stmt p) {
 		auto l = convert_expr(p->u.ass_.expr_1);
 		if (!std::holds_alternative<nested_var>(l->val))
 			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number),
-				"Non-assignable type.");
+				"non-assignable type");
 		ret->val = stmt::ass {
 			.v = std::move(std::get<nested_var>(l->val)),
 			.e = convert_expr(p->u.ass_.expr_2),
@@ -218,7 +219,7 @@ stmt::uptr convert_stmt(Stmt p) {
 		auto l = convert_expr(p->u.incr_.expr_);
 		if (!std::holds_alternative<nested_var>(l->val))
 			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number),
-				"Non-assignable type.");
+				"non-assignable type");
 		ret->val = stmt::unary {
 			.v = std::move(std::get<nested_var>(l->val)),
 			.op = stmt::unary::op_type::INCR,
@@ -229,7 +230,7 @@ stmt::uptr convert_stmt(Stmt p) {
 		auto l = convert_expr(p->u.incr_.expr_);
 		if (!std::holds_alternative<nested_var>(l->val))
 			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number),
-				"Non-assignable type.");
+				"non-assignable type");
 		ret->val = stmt::unary {
 			.v = std::move(std::get<nested_var>(l->val)),
 			.op = stmt::unary::op_type::DECR,
@@ -271,7 +272,7 @@ stmt::uptr convert_stmt(Stmt p) {
 		if (!std::holds_alternative<nested_var>(l->val))
 			throw compilation_error(convert_bnfc_pos(p->u.for_.expr_->line_number,
 				p->u.for_.expr_->char_number),
-				"Invalid reference value type.");
+				"invalid reference value type");
 		ret->val = stmt::loop_for {
 			.tp = get_single_type(p->u.for_.typesimple_),
 			.id = ident(p->u.for_.ident_),
@@ -363,14 +364,21 @@ type convert_type(Type p) {
 void convert_field(Field field, std::vector<nested_var::field_type> &ret) {
 	auto convert_field_val = [&](FieldVal field_val) {
 		switch (field_val->kind) {
-		case FieldVal_::is_FieldValCall:
-			ret.emplace_back(func_call {
+		case FieldVal_::is_FieldValCall: {
+			nested_var::field_type f;
+			f.val = func_call {
 				.id = ident(field_val->u.fieldvalcall_.ident_),
 				.params = convert_list_expr(field_val->u.fieldvalcall_.listexpr_)
-			});
+			};
+			copy_elem_pos(&f, field);
+			ret.emplace_back(std::move(f));
 			break;
+		}
 		case FieldVal_::is_FieldValSingle:
-			ret.emplace_back(ident(field_val->u.fieldvalsingle_.ident_));
+			nested_var::field_type f;
+			f.val = field_val->u.fieldvalsingle_.ident_;
+			copy_elem_pos(&f, field);
+			ret.emplace_back(std::move(f));
 			break;
 		}
 	};
@@ -379,15 +387,21 @@ void convert_field(Field field, std::vector<nested_var::field_type> &ret) {
 	case Field_::is_FieldSingle:
 		convert_field_val(field->u.fieldsingle_.fieldval_);
 		break;
-	case Field_::is_FieldArray:
+	case Field_::is_FieldArray: {
 		convert_field_val(field->u.fieldarray_.fieldval_);
-		ret.emplace_back(nested_var::array_pos {
-			convert_expr(field->u.fieldarray_.expr_)
-		});
+		nested_var::field_type arr_pos;
+		arr_pos.val = nested_var::array_pos {convert_expr(field->u.fieldarray_.expr_)};
+		copy_elem_pos(&arr_pos, field);
+		ret.emplace_back(std::move(arr_pos));
 		break;
-	case Field_::is_FieldSelf:
-		ret.emplace_back(nested_var::self {});
+	}
+	case Field_::is_FieldSelf: {
+		nested_var::field_type self;
+		self.val = nested_var::self {};
+		copy_elem_pos(&self, field);
+		ret.emplace_back(std::move(self));
 		break;
+	}
 	default:
 		fprintf(stderr, "Error: bad kind field when converting Type!\n");
 		exit(1);
@@ -407,18 +421,19 @@ nested_var::base_type convert_field_to_base(nested_var::field_type field) {
 	nested_var::base_type ret;
 	std::visit(overloaded {
 		[&](func_call &f) {
-			ret = std::move(f);
+			ret.val = std::move(f);
 		},
 		[&](nested_var::field_ident &f) {
-			ret = std::move(f);
+			ret.val = std::move(f);
 		},
 		[&](nested_var::self &f) {
-			ret = std::move(f);
+			ret.val = std::move(f);
 		},
 		[&](auto &) {
 			assert(false);
 		},
-	}, field);
+	}, field.val);
+	ret.pos = field.pos;
 	return ret;
 }
 
@@ -428,32 +443,40 @@ exp::uptr convert_expr(Expr p) {
 	switch (p->kind) {
 	case Expr_::is_ENewObject: {
 		auto class_id = ident(p->u.enewobject_.ident_);
-		ret->val = nested_var {
-			.base = new_val {
-				.tp = type::single_type::class_type {std::move(class_id)},
-				.arr_size = std::nullopt,
-			},
+		nested_var::base_type base;
+		base.val = new_val {
+			.tp = type::single_type::class_type {std::move(class_id)},
+			.arr_size = std::nullopt,
+		};
+		copy_elem_pos(&base, p);
+		auto nest_var = nested_var {
+			.base = std::move(base),
 			.fields = {},
 		};
+		ret->val = std::move(nest_var);
 		break;
 	}
 	case Expr_::is_ENewArray: {
 		auto type = get_single_type(p->u.enewarray_.typesimple_);
-		ret->val = nested_var {
-			.base = new_val {
-				.tp = type::array_type {type},
-				.arr_size = convert_expr(p->u.enewarray_.expr_),
-			},
+		nested_var::base_type base;
+		base.val = new_val {
+			.tp = type::array_type {type},
+			.arr_size = convert_expr(p->u.enewarray_.expr_),
+		};
+		copy_elem_pos(&base, p);
+		auto nest_var = nested_var {
+			.base = std::move(base),
 			.fields = {},
 		};
+		ret->val = std::move(nest_var);
 		break;
 	}
 	case Expr_::is_ETmpVar: {
 		auto base_e = convert_expr(p->u.etmpvar_.expr_);
 		if (!std::holds_alternative<nested_var>(base_e->val) ||
-				!std::holds_alternative<new_val>(std::get<nested_var>(base_e->val).base))
+				!std::holds_alternative<new_val>(std::get<nested_var>(base_e->val).base.val))
 			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number),
-				"Invalid tmp value type. Only 'new ...' allowed here.");
+				"invalid tmp value type - only 'new ...' allowed here");
 		ret->val = nested_var {
 			.base = std::move(std::get<nested_var>(base_e->val).base),
 			.fields = convert_list_field(p->u.etmpvar_.listfield_)
@@ -463,11 +486,11 @@ exp::uptr convert_expr(Expr p) {
 	case Expr_::is_ETmpArrayElem: {
 		auto base_e = convert_expr(p->u.etmparrayelem_.expr_1);
 		if (!std::holds_alternative<nested_var>(base_e->val) ||
-				!std::holds_alternative<new_val>(std::get<nested_var>(base_e->val).base))
+				!std::holds_alternative<new_val>(std::get<nested_var>(base_e->val).base.val))
 			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number),
-				"Invalid tmp value type. Only 'new ...' allowed here.");
+				"invalid tmp value type - only 'new ...' allowed here");
 		std::vector<nested_var::field_type> fields;
-		fields.emplace_back(convert_expr(p->u.etmparrayelem_.expr_2));
+		fields.emplace_back(convert_expr_to_field(p->u.etmparrayelem_.expr_2));
 		ret->val = nested_var {
 			.base = std::move(std::get<nested_var>(base_e->val).base),
 			.fields = std::move(fields)
@@ -477,11 +500,11 @@ exp::uptr convert_expr(Expr p) {
 	case Expr_::is_ETmpArrayElemVar: {
 		auto base_e = convert_expr(p->u.etmparrayelemvar_.expr_1);
 		if (!std::holds_alternative<nested_var>(base_e->val) ||
-				!std::holds_alternative<new_val>(std::get<nested_var>(base_e->val).base))
+				!std::holds_alternative<new_val>(std::get<nested_var>(base_e->val).base.val))
 			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number),
-				"Invalid tmp value type. Only 'new ...' allowed here.");
+				"invalid tmp value type - only 'new ...' allowed here");
 		// check base_e == new_val
-		auto arr_pos = convert_expr(p->u.etmparrayelemvar_.expr_2);
+		auto arr_pos = convert_expr_to_field(p->u.etmparrayelemvar_.expr_2);
 		auto fields = convert_list_field(p->u.etmparrayelemvar_.listfield_);
 		fields.insert(fields.begin(), std::move(arr_pos));
 		ret->val = nested_var {
@@ -495,7 +518,7 @@ exp::uptr convert_expr(Expr p) {
 			p->u.ecastednull_.expr_->u.evar_.listfield_->field_->kind != Field_::is_FieldSingle ||
 			p->u.ecastednull_.expr_->u.evar_.listfield_->field_->u.fieldsingle_.fieldval_->kind !=
 				FieldVal_::is_FieldValSingle)
-			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number), "Invalid cast type");
+			throw compilation_error(convert_bnfc_pos(p->line_number, p->char_number), "invalid cast type");
 		auto class_id = ident(p->u.ecastednull_
 			.expr_->u.evar_
 			.listfield_->field_->u.fieldsingle_
@@ -583,6 +606,13 @@ exp::uptr convert_expr(Expr p) {
 		fprintf(stderr, "Error: bad kind field when converting Expr!\n");
 		exit(1);
 	}
+	return ret;
+}
+
+nested_var::field_type convert_expr_to_field(Expr exp) {
+	nested_var::field_type ret;
+	copy_elem_pos(&ret, exp);
+	ret.val = convert_expr(exp);
 	return ret;
 }
 
