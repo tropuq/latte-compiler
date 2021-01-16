@@ -62,7 +62,7 @@ public:
 	}
 
 	void push_var(const ident &id, type::val_type tp) {
-		if (get_single_type(tp) == type::single_type {type::single_type::type_enum::VOID})
+		if (get_single_type(tp) == type::single_type::type_enum::VOID)
 			throw compilation_error(concat("variable '", id, "' cannot be of type void"));
 		bool success = _block_vars.back().emplace(id).second;
 		if (!success)
@@ -244,7 +244,7 @@ bool can_convert_type(const type::val_type &from, const type::val_type &to, veri
 	if (from == to)
 		return true;
 	auto to_class = try_get_class_tp(to);
-	auto is_from_null_type = from == type::single_type {type::single_type::null_type {}};
+	auto is_from_null_type = from == type::single_type::null_type {};
 	if (!to_class) {
 		if (is_from_null_type && std::holds_alternative<type::array_type>(to))
 			return true;
@@ -343,7 +343,7 @@ get_nested_var_type_return get_nested_var_type(nested_var &v, verifier_data &vf_
 			assignable = false;
 			if (n.arr_size) {
 				auto arr_size_tp = verify_exp_code(*n.arr_size, vf_data);
-				if (arr_size_tp != type::single_type {type::single_type::type_enum::INT})
+				if (arr_size_tp != type::single_type::type_enum::INT)
 					throw compilation_error(v.base.pos,
 						concat("size of array should be of type '",
 							type::single_type {type::single_type::type_enum::INT},
@@ -376,12 +376,7 @@ get_nested_var_type_return get_nested_var_type(nested_var &v, verifier_data &vf_
 				verify_call_args(method, f, vf_data, field.pos);
 				type = method->tp.val;
 
-				if (std::holds_alternative<type::single_type>(type)) {
-					auto single_tp = std::get<type::single_type>(type);
-					assignable = std::holds_alternative<type::single_type::class_type>(single_tp.val);
-				} else if (std::holds_alternative<type::array_type>(type)) {
-					assignable = true;
-				}
+				assignable = false;
 			},
 			[&](nested_var::field_ident &i) {
 				if (std::holds_alternative<type::array_type>(type)) {
@@ -501,7 +496,9 @@ type::val_type verify_exp_code(exp::uptr &ex, verifier_data &vf_data) {
 			return exp_tp;
 		},
 		[&](exp::null_casted &e) -> type::val_type {
-			return convert_to_val_type(e.tp);
+			auto converted_tp = convert_to_val_type(e.tp);
+			verify_type(converted_tp, vf_data);
+			return converted_tp;
 		},
 		[&](exp::null &) -> type::val_type {
 			return type::single_type {type::single_type::null_type {}};

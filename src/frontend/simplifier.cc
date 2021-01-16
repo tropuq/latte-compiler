@@ -30,12 +30,34 @@ void simplify_expression_code(exp::uptr &ex) {
 			std::holds_alternative<bool>(v) ||
 			std::holds_alternative<std::string>(v);
 	};
-	visit(overloaded {
-		[&](exp::call &e) {
-			for (auto &param : e.params)
-				simplify_expression_code(param);
+	std::visit(overloaded {
+		[&](nested_var &e) {
+			std::visit(overloaded {
+				[&](func_call &f) {
+					for (auto &param : f.params)
+						simplify_expression_code(param);
+				},
+				[&](new_val &n) {
+					if (n.arr_size)
+						simplify_expression_code(*n.arr_size);
+				},
+				[](auto &) {}
+			}, e.base.val);
+			for (auto &field : e.fields) {
+				std::visit(overloaded {
+					[&](func_call &f) {
+						for (auto &param : f.params)
+							simplify_expression_code(param);
+					},
+					[&](nested_var::array_pos &a) {
+						simplify_expression_code(a);
+					},
+					[](auto &) {}
+				}, field.val);
+			}
 		},
 		[&](exp::binary &e) {
+			// TODO: simplify self == self / null == null etc
 			simplify_expression_code(e.e1);
 			simplify_expression_code(e.e2);
 			// TODO: simplify e2
@@ -88,7 +110,7 @@ void simplify_expression_code(exp::uptr &ex) {
 void simplify_block_code(block::uptr &bl);
 
 void simplify_statement_code(stmt::uptr &st) {
-	visit(overloaded {
+	std::visit(overloaded {
 		[&](stmt::block &bl) {
 			simplify_block_code(bl.bl);
 		},
@@ -144,7 +166,7 @@ bool simplify_block_returns(block::uptr &bl);
 
 // return true if this is the last statement in current block/function
 bool simplify_statement_returns(stmt::uptr &st) {
-	return visit(overloaded {
+	return std::visit(overloaded {
 		[&](stmt::block &bl) {
 			return simplify_block_returns(bl.bl);
 		},
@@ -180,9 +202,14 @@ bool simplify_block_returns(block::uptr &bl) {
 }
 
 bool contains_call(const exp::uptr &ex) {
-	return visit(overloaded {
-		[&](exp::call &) {
-			return true;
+	return std::visit(overloaded {
+		[&](nested_var &v) {
+			if (std::holds_alternative<func_call>(v.base.val))
+				return true;
+			for (auto &f : v.fields)
+				if (std::holds_alternative<func_call>(f.val))
+					return true;
+			return false;
 		},
 		[&](exp::binary &e) {
 			return contains_call(e.e1) || contains_call(e.e2);
@@ -199,7 +226,7 @@ bool contains_call(const exp::uptr &ex) {
 void remove_empty_from_block(block::uptr &bl);
 
 void remove_empty_from_statement(stmt::uptr &st) {
-	visit(overloaded {
+	std::visit(overloaded {
 		[&](stmt::block &bl) {
 			remove_empty_from_block(bl.bl);
 			if (bl.bl->stmts.empty())
@@ -233,6 +260,9 @@ void remove_empty_from_statement(stmt::uptr &st) {
 		[&](stmt::loop_while &s) {
 			remove_empty_from_statement(s.s);
 		},
+		[&](stmt::loop_for &s) {
+			remove_empty_from_statement(s.s);
+		},
 		[&](stmt::exp &e) {
 			if (!contains_call(e.e))
 				st->val = stmt::empty {};
@@ -251,19 +281,73 @@ void remove_empty_from_block(block::uptr &bl) {
 	bl->stmts = std::move(new_stmts);
 }
 
+void simplify_function_code(func::uptr &fun) {
+	return simplify_block_code(fun->bl);
+}
+
+void simplify_class_methods_code(class_def::uptr &cls) {
+	for (auto &def : cls->defs)
+		if (std::holds_alternative<func::uptr>(def))
+			simplify_function_code(std::get<func::uptr>(def));
+}
+
+void simplify_function_returns(func::uptr &fun) {
+	if (!simplify_block_returns(fun->bl) && fun->tp.val != type::single_type::type_enum::VOID)
+		throw compilation_error(fun->pos, concat("non void function '", fun->id, "' doesn't return"));
+}
+
+void simplify_class_methods_returns(class_def::uptr &cls) {
+	for (auto &def : cls->defs)
+		if (std::holds_alternative<func::uptr>(def))
+			simplify_function_returns(std::get<func::uptr>(def));
+}
+
+void remove_empty_from_function(func::uptr &fun) {
+	return remove_empty_from_block(fun->bl);
+}
+
+void remove_empty_from_class_methods(class_def::uptr &cls) {
+	for (auto &def : cls->defs)
+		if (std::holds_alternative<func::uptr>(def))
+			remove_empty_from_function(std::get<func::uptr>(def));
+}
+
 void simplify_program(program::uptr &prog) {
 	// simplify code
-	for (auto &fun : prog->funcs)
-		simplify_block_code(fun->bl);
+	for (auto &def : prog->defs) {
+		std::visit(overloaded { // TODO: less copy pasting
+			[](func::uptr &fun) {
+				simplify_function_code(fun);
+			},
+			[](class_def::uptr &cls) {
+				simplify_class_methods_code(cls);
+			}
+		}, def);
+	}
 
 	// simplify returns (and perform some checks)
-	for (auto &fun : prog->funcs)
-		if (!simplify_block_returns(fun->bl) && fun->tp.val != type::type_enum::VOID)
-			throw compilation_error(fun->pos, concat("non void function '", fun->id, "' doesn't return"));
+	for (auto &def : prog->defs) {
+		std::visit(overloaded {
+			[](func::uptr &fun) {
+				simplify_function_returns(fun);
+			},
+			[](class_def::uptr &cls) {
+				simplify_class_methods_returns(cls);
+			}
+		}, def);
+	}
 
 	// remove most of the empty statements
-	for (auto &fun : prog->funcs)
-		remove_empty_from_block(fun->bl);
+	for (auto &def : prog->defs) {
+		std::visit(overloaded {
+			[](func::uptr &fun) {
+				remove_empty_from_function(fun);
+			},
+			[](class_def::uptr &cls) {
+				remove_empty_from_class_methods(cls);
+			}
+		}, def);
+	}
 
 	// TODO: remove unused functions
 }

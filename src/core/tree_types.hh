@@ -41,7 +41,7 @@ struct type : tree_node {
 	val_type val;
 };
 
-inline bool operator==(const type::single_type &a, const type::single_type &b) {
+inline bool operator==(const type::single_type::val_type &a, const type::single_type::val_type &b) {
 	using st = type::single_type;
 	return std::visit(overloaded {
 		[](const st::type_enum &ta, const st::type_enum &tb) {
@@ -56,28 +56,39 @@ inline bool operator==(const type::single_type &a, const type::single_type &b) {
 		[](auto &, auto &) {
 			return false;
 		}
-	}, a.val, b.val);
+	}, a, b);
 }
 
-inline bool operator!=(const type::single_type &a, const type::single_type &b) {
+inline bool operator!=(const type::single_type::val_type &a, const type::single_type::val_type &b) {
 	return !(a == b);
 }
 
-inline bool operator==(const type::array_type &a, const type::array_type &b) {
-	return a.val == b.val;
+inline bool operator==(const type::val_type &a, const type::single_type::val_type &b) {
+	if (std::holds_alternative<type::single_type>(a))
+		return std::get<type::single_type>(a).val == b;
+	return false;
 }
 
-inline bool operator!=(const type::array_type &a, const type::array_type &b) {
+inline bool operator==(const type::single_type::val_type &a, const type::val_type &b) {
+	return b == a;
+}
+
+inline bool operator!=(const type::val_type &a, const type::single_type::val_type &b) {
 	return !(a == b);
 }
+
+inline bool operator!=(const type::single_type::val_type &a, const type::val_type &b) {
+	return !(a == b);
+}
+
 
 inline bool operator==(const type::val_type &a, const type::val_type &b) {
 	return std::visit(overloaded {
 		[](const type::single_type &ta, const type::single_type &tb) {
-			return ta == tb;
+			return ta.val == tb.val;
 		},
 		[](const type::array_type &ta, const type::array_type &tb) {
-			return ta == tb;
+			return ta.val.val == tb.val.val;
 		},
 		[](auto &, auto &) {
 			return false;
