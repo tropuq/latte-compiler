@@ -41,68 +41,68 @@ public:
 		if (add)
 			_instrs.emplace_back(std::move(i));
 	}
-	void push_prepare_call_arg(instr::arg a) {
+	void push_prepare_call_arg(instr::rvalue rv) {
 		push_instr(instr::prepare_call_arg {
-			.a = std::move(a),
+			.rv = std::move(rv),
 		});
 	}
 
-	void push_call_ass(core::ident res_id, core::ident func_id, size_t args_num) {
+	void push_call_ass(instr::lvalue lv, instr::func_addr func_hdl, size_t args_num) {
 		push_instr(instr::call_ass {
-			.res_id = std::move(res_id),
-			.func_id = std::move(func_id),
+			.lv = std::move(lv),
+			.func_hdl = std::move(func_hdl),
 			.args_num = args_num,
 		});
 	}
 
-	void push_bin_ass(core::ident id, instr::arg a1, instr::arg a2, core::exp::binary::arithmetic_op_type op) {
+	void push_bin_ass(instr::lvalue lv, instr::rvalue rv1, instr::rvalue rv2, core::exp::binary::arithmetic_op_type op) {
 		push_instr(instr::bin_ass {
-			.id = std::move(id),
-			.a1 = std::move(a1),
-			.a2 = std::move(a2),
+			.lv = std::move(lv),
+			.rv1 = std::move(rv1),
+			.rv2 = std::move(rv2),
 			.op = std::move(op),
 		});
 	}
 
-	void push_unary_ass(core::ident id, core::exp::unary::op_type op, instr::arg::var v) {
+	void push_unary_ass(instr::lvalue lv, core::exp::unary::op_type op, instr::rvalue rv) {
 		push_instr(instr::unary_ass {
-			.id = std::move(id),
+			.lv = std::move(lv),
 			.op = std::move(op),
-			.v = std::move(v),
+			.rv = std::move(rv),
 		});
 	}
 
-	void push_set(core::ident id, instr::arg a) {
+	void push_set(instr::lvalue lv, instr::rvalue rv) {
 		push_instr(instr::set {
-			.id = std::move(id),
-			.a = std::move(a),
+			.lv = std::move(lv),
+			.rv = std::move(rv),
 		});
 	}
 
-	void push_jump(std::string label) {
+	void push_jump(core::ident label) {
 		push_instr(instr::jump {
 			.label = std::move(label),
 		});
 	}
 
-	void push_cond_jump(instr::arg a1, instr::arg a2, core::exp::binary::rel_op_type op, std::string label_true) {
+	void push_cond_jump(instr::rvalue rv1, instr::rvalue rv2, core::exp::binary::rel_op_type op, core::ident label_true) {
 		push_instr(instr::cond_jump {
-			.a1 = std::move(a1),
-			.a2 = std::move(a2),
+			.rv1 = std::move(rv1),
+			.rv2 = std::move(rv2),
 			.op = std::move(op),
 			.label_true = std::move(label_true),
 		});
 	}
 
-	void push_label(std::string name) {
+	void push_label(core::ident name) {
 		push_instr(instr::label {
 			.name = std::move(name),
 		});
 	}
 
-	void push_ret(std::optional<instr::arg> a = std::nullopt) {
+	void push_ret(std::optional<instr::rvalue> val = std::nullopt) {
 		push_instr(instr::ret {
-			.a = std::move(a),
+			.val = std::move(val),
 		});
 	}
 

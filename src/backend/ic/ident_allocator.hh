@@ -26,11 +26,15 @@ public:
 		EXP_CALL,
 		EXP_BINARY,
 		EXP_UNARY,
+		VAR_ADDR_DEREF,
+		OBJ_VTABLE,
+		MEM_ADDR,
+		ITER_POS,
 	};
 
 	struct user_var_data {
 		core::ident id;
-		core::type::type_enum tp;
+		core::type::val_type tp;
 	};
 
 private:
@@ -55,6 +59,10 @@ private:
 		case var_type::EXP_CALL: return ".res_exp_call";
 		case var_type::EXP_BINARY: return ".res_exp_binary";
 		case var_type::EXP_UNARY: return ".res_exp_unary";
+		case var_type::VAR_ADDR_DEREF: return ".var_addr_deref";
+		case var_type::OBJ_VTABLE: return ".obj_vtable";
+		case var_type::MEM_ADDR: return ".mem_addr";
+		case var_type::ITER_POS: return ".iter_pos";
 		}
 		__builtin_unreachable();
 	}
@@ -66,7 +74,7 @@ private:
 	struct var_desc {
 		struct internal_user_var_data {
 			size_t id;
-			core::type::type_enum tp;
+			core::type::val_type tp;
 		};
 		std::vector<internal_user_var_data> stack;
 		size_t cur_id = 0;
@@ -84,7 +92,7 @@ public:
 		return concat(tmp_var_str(type), "_", std::to_string(_var_cnt[type]++));
 	}
 
-	core::ident alloc_user_var(const core::ident &id, core::type::type_enum tp) {
+	core::ident alloc_user_var(const core::ident &id, core::type::val_type tp) {
 		bool success = _block_vars.back().emplace(id).second;
 		assert(success);
 		auto &var = _vars_stack[id];
@@ -92,10 +100,24 @@ public:
 		return user_var_str(id, var.stack.back().id);
 	}
 
-	user_var_data get_user_var(const core::ident &id) {
-		auto &var = _vars_stack[id];
-		assert(!var.stack.empty());
-		return {user_var_str(id, var.stack.back().id), var.stack.back().tp};
+	std::optional<user_var_data> get_user_var(const core::ident &id) {
+		auto it = _vars_stack.find(id);
+		if (it == _vars_stack.end())
+			return std::nullopt;
+		assert(!it->second.stack.empty());
+		return user_var_data {user_var_str(id, it->second.stack.back().id), it->second.stack.back().tp};
+	}
+
+	static core::ident get_method(const core::ident &class_id, const core::ident &method_id) {
+		return concat(class_id, ".method.", method_id);
+	}
+
+	static core::ident get_vtable(const core::ident &class_id) {
+		return concat(class_id, ".vtable");
+	}
+
+	static core::ident get_constructor(const core::ident &class_id) {
+		return concat(class_id, ".constructor");
 	}
 
 	void push_block() {

@@ -6,7 +6,7 @@ extern "C" {
 
 // #include "backend/asm/gen_asm.hh"
 // #include "backend/ic/control_flow_graph.hh"
-// #include "backend/ic/gen_ic.hh"
+#include "backend/ic/gen_ic.hh"
 #include "core/code_pos.hh"
 #include "core/compilation_errors.hh"
 #include "core/tree_types.hh"
@@ -68,7 +68,8 @@ void compile(latte::core::program::uptr &prog, out_filenames f) {
 	// std::cerr << prog << std::endl;
 	latte::frontend::verify_program(prog);
 	latte::frontend::simplify_program(prog);
-	// auto qcode = latte::backend::convert_to_quad_prog(prog);
+	auto qcode = latte::backend::convert_to_quad_prog(prog);
+	std::cerr << qcode << std::endl;
 	// std::vector<latte::backend::control_flow_graph> cfgs;
 	// for (auto &f : qcode.funcs)
 	// 	cfgs.emplace_back(latte::backend::control_flow_graph(f));

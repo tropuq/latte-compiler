@@ -39,6 +39,8 @@ struct type : tree_node {
 	};
 	using val_type = std::variant<single_type, array_type>;
 	val_type val;
+	type() {}
+	type(val_type v) : val(std::move(v)) {}
 };
 
 inline bool operator==(const type::single_type::val_type &a, const type::single_type::val_type &b) {
