@@ -38,6 +38,7 @@ public:
 	const std::vector<instr_info> &get_instr_info() const {
 		return _instrs;
 	}
+	std::ostream &print(std::ostream &ost) const;
 };
 
 class control_flow_graph {
@@ -52,6 +53,33 @@ public:
 	const func::metadata &metadata() const {
 		return _meta;
 	}
+	std::ostream &print(std::ostream &ost) const;
+};
+
+class program_graph {
+	std::vector<vtable_description> _vtbl;
+	std::vector<control_flow_graph> _cfgs;
+public:
+	program_graph(const program &prog);
+	const std::vector<control_flow_graph> &control_flow_graphs() const {
+		return _cfgs;
+	}
+	const std::vector<vtable_description> &vtables() const {
+		return _vtbl;
+	}
+	std::ostream &print(std::ostream &ost) const;
 };
 
 } // namespace latte::backend
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::backend::basic_block &bl) {
+	return bl.print(ost);
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::backend::control_flow_graph &cfg) {
+	return cfg.print(ost);
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::backend::program_graph &p) {
+	return p.print(ost);
+}

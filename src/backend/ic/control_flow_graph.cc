@@ -10,37 +10,64 @@ namespace latte::backend {
 
 void update_kill_use_info(const instr &i, std::function<void(const core::ident &)> kill,
 		std::function<void(const core::ident &)> use) {
-	auto use_if_var = [&](const instr::arg &a) {
-		if (std::holds_alternative<instr::arg::var>(a.val))
-			use(std::get<instr::arg::var>(a.val).id);
+	auto use_if_var = [&](const instr::rvalue &rv) {
+		std::visit(overloaded {
+			[&](const instr::variable_id &v) {
+				use(v.id);
+			},
+			[&](const instr::address_offset &a) {
+				use(a.var.id);
+			},
+			[](auto &) {},
+		}, rv.val);
+	};
+	auto use_if_vtablt_method = [&](const instr::func_addr &rv) {
+		std::visit(overloaded {
+			[&](const instr::address_offset &a) {
+				use(a.var.id);
+			},
+			[](auto &) {},
+		}, rv.val);
+	};
+	auto kill_if_var = [&](const instr::lvalue &lv) {
+		std::visit(overloaded {
+			[&](const instr::variable_id &v) {
+				kill(v.id);
+			},
+			[&](const instr::address_offset &a) {
+				kill(a.var.id);
+			},
+			[](auto &) {},
+		}, lv.val);
 	};
 	std::visit(overloaded {
-		[&](instr::prepare_call_arg i) {
-			use_if_var(i.a);
+		[&](const instr::prepare_call_arg &i) {
+			use_if_var(i.rv);
 		},
-		[&](instr::call_ass i) {
-			kill(i.res_id);
+		[&](const instr::call_ass &i) {
+			kill_if_var(i.lv);
+			use_if_vtablt_method(i.func_hdl);
 		},
-		[&](instr::bin_ass i) {
-			kill(i.id);
-			use_if_var(i.a1);
-			use_if_var(i.a2);
+		[&](const instr::bin_ass &i) {
+			kill_if_var(i.lv);
+			use_if_var(i.rv1);
+			use_if_var(i.rv2);
 		},
-		[&](instr::unary_ass i) {
-			kill(i.id);
-			use(i.v.id);
+		[&](const instr::unary_ass &i) {
+			kill_if_var(i.lv);
+			use_if_var(i.rv);
 		},
-		[&](instr::set i) {
-			kill(i.id);
-			use_if_var(i.a);
+		[&](const instr::set &i) {
+			kill_if_var(i.lv);
+			use_if_var(i.rv);
 		},
-		[&](instr::cond_jump i) {
-			use_if_var(i.a1);
-			use_if_var(i.a2);
+		[&](const instr::cond_jump &i) {
+			use_if_var(i.rv1);
+			use_if_var(i.rv2);
 		},
-		[&](instr::ret i) {
-			if (i.a)
-				use_if_var(*i.a);
+		[&](const instr::ret &i) {
+			if (i.val)
+				use_if_var(*i.val);
 		},
 		[&](auto) {},
 	}, i.val);
@@ -79,6 +106,7 @@ void basic_block::calc_alive_after() {
 
 std::vector<basic_block> control_flow_graph::create_basic_blocks(const std::vector<instr> &instrs) {
 	std::set<std::string> active_labels;
+	// mark which labels are used by jumps
 	for (auto &i : instrs) {
 		std::visit(overloaded {
 			[&](instr::jump j) {
@@ -106,10 +134,10 @@ std::vector<basic_block> control_flow_graph::create_basic_blocks(const std::vect
 	auto is_jump = [](const instr &i) {
 		return std::holds_alternative<instr::jump>(i.val) || std::holds_alternative<instr::cond_jump>(i.val);
 	};
+	// split instruction list into blocks
 	for (auto &i : instrs) {
-		if (is_active_label(i) && !block_instrs.empty()) {
+		if (is_active_label(i) && !block_instrs.empty())
 			next_block();
-		}
 		block_instrs.emplace_back(i);
 		if (is_jump(i))
 			next_block();
@@ -122,6 +150,7 @@ std::vector<basic_block> control_flow_graph::create_basic_blocks(const std::vect
 		if (std::holds_alternative<instr::label>(b._instrs[0].i.val))
 			name_to_block[std::get<instr::label>(b._instrs[0].i.val).name] = &b;
 
+	// calculate blocks neighbours
 	for (size_t i = 0; i < blocks.size(); ++i) {
 		auto &b = blocks[i];
 		auto is_jump = std::holds_alternative<instr::jump>(b._instrs.back().i.val);
@@ -145,11 +174,6 @@ std::vector<basic_block> control_flow_graph::create_basic_blocks(const std::vect
 		}
 	}
 
-	return blocks;
-}
-
-control_flow_graph::control_flow_graph(const func &f)
-		: _blocks(create_basic_blocks(f.instrs)), _meta(f.meta) {
 	auto add_set = [](std::set<core::ident> &dst, const std::set<core::ident> &src) {
 		for (auto &i : src)
 			dst.emplace(i);
@@ -162,7 +186,7 @@ control_flow_graph::control_flow_graph(const func &f)
 	// calculate Ins
 	while (true) {
 		bool rep = false;
-		for (auto &b : _blocks) {
+		for (auto &b : blocks) {
 			auto prev = b._beg_alive;
 			for (auto *nb : b._next_blocks)
 				add_set(b._beg_alive, nb->_beg_alive);
@@ -176,12 +200,47 @@ control_flow_graph::control_flow_graph(const func &f)
 	}
 
 	// calculate Outs
-	for (auto &b : _blocks)
+	for (auto &b : blocks)
 		for (auto *nb : b._next_blocks)
 			add_set(b._end_alive, nb->_beg_alive);
 
-	for (auto &b : _blocks)
+	for (auto &b : blocks)
 		b.calc_alive_after();
+
+	return blocks;
+}
+
+control_flow_graph::control_flow_graph(const func &f)
+	: _blocks(create_basic_blocks(f.instrs)), _meta(f.meta) {}
+
+program_graph::program_graph(const program &p)
+		: _vtbl(p.vtables) {
+	for (auto &f : p.funcs)
+		_cfgs.emplace_back(f);
+}
+
+std::ostream &basic_block::print(std::ostream &ost) const {
+	auto alive_ident = "     alive: ";
+	ost << alive_ident << get_beg_alive() << '\n';
+	for (auto &i : _instrs) {
+		ost << i.i << '\n';
+		ost << alive_ident << i.alive_after << '\n';
+	}
+	return ost;
+}
+
+std::ostream &control_flow_graph::print(std::ostream &ost) const {
+	ost << _meta.name << '(' << _meta.args << "):\n";
+	for (auto &b : _blocks)
+		ost << b << '\n';
+	return ost;
+}
+
+std::ostream &program_graph::print(std::ostream &ost) const {
+	ost << _vtbl << '\n';
+	for (auto &cfg : _cfgs)
+		ost << cfg << '\n';
+	return ost;
 }
 
 } // namespace latte::backend
