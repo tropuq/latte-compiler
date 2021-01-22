@@ -46,3 +46,7 @@ char *_add_strings(const char *a, const char *b) {
 int _strings_equal(const char *a, const char *b) {
 	return strcmp(a, b) == 0;
 }
+
+void* _alloc(unsigned long long size) {
+    return malloc((size + 1) * 8);
+}

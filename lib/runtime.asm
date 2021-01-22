@@ -1,5 +1,6 @@
 global _strings_equal
 global _add_strings
+global _alloc
 global error
 global printInt
 global printString
@@ -110,6 +111,34 @@ _add_strings:
 	call memcpy
 	mov rax, [rbp - 24]
 .L13:
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rdx
+	pop rcx
+	pop rdi
+	pop rsi
+	leave
+	ret
+
+_alloc:
+	push rbp
+	mov rbp, rsp
+	sub rsp, 8
+	and rsp, 0xfffffffffffffff0
+	push rsi
+	push rdi
+	push rcx
+	push rdx
+	push r8
+	push r9
+	push r10
+	push r11
+	mov rdi, [rbp + 16]
+	add rdi, 1
+	sal rdi, 3
+	call malloc
 	pop r11
 	pop r10
 	pop r9
