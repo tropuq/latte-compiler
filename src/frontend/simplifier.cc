@@ -11,13 +11,27 @@ namespace latte::frontend {
 
 // TODO: check if not dividing by 0
 template<typename T>
-void exec_oper_and_update(exp::uptr &e1, exp::uptr &e2, exp::binary::op_type op,
-	decltype(exp::val) &res)
-{
+void exec_oper_and_update(exp::uptr &e1, exp::uptr &e2, exp::binary::op_type op, decltype(exp::val) &res) {
 	auto e1_val = std::get<T>(e1->val);
 	auto e2_val = std::get<T>(e2->val);
 	visit([&](auto op) {
 		auto op_func = get_oper_func<T>(op);
+		res = op_func(e1_val, e2_val);
+	}, op);
+}
+
+template<>
+void exec_oper_and_update<int>(exp::uptr &e1, exp::uptr &e2, exp::binary::op_type op, decltype(exp::val) &res) {
+	auto e1_val = std::get<int>(e1->val);
+	auto e2_val = std::get<int>(e2->val);
+	if (e2_val == 0 && std::holds_alternative<exp::binary::arithmetic_op_type>(op)) {
+		auto ar_op = std::get<exp::binary::arithmetic_op_type>(op);
+		if (ar_op == exp::binary::arithmetic_op_type::DIV || ar_op == exp::binary::arithmetic_op_type::MOD)
+			return;
+	}
+
+	visit([&](auto op) {
+		auto op_func = get_oper_func<int>(op);
 		res = op_func(e1_val, e2_val);
 	}, op);
 }
