@@ -34,6 +34,7 @@ struct gen_ic_data {
 			size_t offset;
 			core::type::val_type type;
 			core::ident virt_class;
+			core::ident name;
 		};
 		struct variable_data {
 			size_t offset;
@@ -199,20 +200,20 @@ instr::rvalue get_array_size(const instr::lvalue &arr, code_builder &builder) {
 instr::lvalue get_array_elem(const instr::lvalue &arr, const instr::rvalue &pos, code_builder &builder) {
 	assert(std::holds_alternative<core::type::array_type>(arr.tp));
 	auto arr_var = load_addr_to_var(arr, builder);
-	auto prepare_index = [&builder](instr::rvalue rv) {
-		instr::address_offset::index_type ret;
+	auto prepare_index = [&builder](const instr::rvalue &rv) {
+		std::pair<std::optional<instr::variable_id>, size_t> ret;
 		std::visit(overloaded {
 			[&](const instr::address_offset &) {
 				// TODO: avoid copy pasting
 				auto addr = builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::VAR_ADDR_DEREF);
 				builder.push_set({addr, rv.tp}, std::move(rv));
-				ret = std::move(addr);
+				ret = {std::move(addr), 0};
 			},
-			[&](int &v) {
-				ret = v;
+			[&](const int &v) {
+				ret = {std::nullopt, v};
 			},
-			[&](instr::variable_id &v) {
-				ret = std::move(v);
+			[&](const instr::variable_id &v) {
+				ret = {std::move(v), 0};
 			},
 			[&](auto &) {
 				assert(false);
@@ -220,11 +221,12 @@ instr::lvalue get_array_elem(const instr::lvalue &arr, const instr::rvalue &pos,
 		}, rv.val);
 		return ret;
 	};
+	auto arr_pos = prepare_index(pos);
 	return {
 		instr::address_offset {
 			.var = std::get<instr::variable_id>(arr_var.val),
-			.index = prepare_index(pos),
-			.offset = 1,
+			.index = arr_pos.first,
+			.offset = 1 + arr_pos.second,
 		}, std::get<core::type::array_type>(arr.tp).val
 	};
 }
@@ -269,6 +271,12 @@ instr::rvalue get_default_value(const core::type::val_type &tp) {
 	return ret;
 }
 
+void gen_incr(const instr::lvalue &lv, code_builder &builder) {
+	instr::lvalue tmp_lv = {builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::EXP_BINARY), int_type};
+	builder.push_bin_ass(tmp_lv, convert_to_rvalue(lv), {1, int_type}, core::exp::binary::arithmetic_op_type::ADD);
+	builder.push_set(lv, convert_to_rvalue(tmp_lv));
+}
+
 instr::lvalue convert_to_quad_nested_var(const core::nested_var &var, code_builder &builder, gen_ic_data &gen_data) {
 	instr::lvalue lv;
 	visit(overloaded {
@@ -284,7 +292,8 @@ instr::lvalue convert_to_quad_nested_var(const core::nested_var &var, code_build
 				auto it = gen_data.cur_cls_data->meth_data.find(f.id);
 				if (it != gen_data.cur_cls_data->meth_data.end()) {
 					convert_call_args(f.params, builder, gen_data);
-					builder.push_prepare_call_arg({self_id, gen_data.cur_cls_data->type});
+					builder.push_prepare_call_arg({instr::variable_id {self_id},
+						gen_data.cur_cls_data->type});
 
 					auto vtable = load_vtable_to_var(self_id, builder);
 					lv.tp = it->second.type;
@@ -361,8 +370,7 @@ instr::lvalue convert_to_quad_nested_var(const core::nested_var &var, code_build
 					builder.push_set(arr_elem_lv, get_default_value(t.val));
 
 					// iter_pos++;
-					builder.push_bin_ass(iter_pos_lv, convert_to_rvalue(iter_pos_lv),
-						{1, int_type}, core::exp::binary::arithmetic_op_type::ADD);
+					gen_incr(iter_pos_lv, builder);
 
 					builder.push_label(std::move(label_cond));
 					builder.push_cond_jump(convert_to_rvalue(std::move(iter_pos_lv)), std::move(size),
@@ -375,8 +383,7 @@ instr::lvalue convert_to_quad_nested_var(const core::nested_var &var, code_build
 
 	for (auto &field : var.fields) {
 		std::visit(overloaded {
-			[](const core::nested_var::self &) { // TODO: remove
-			},
+			[](const core::nested_var::self &) {},
 			[&](const core::func_call &f) {
 				assert(std::holds_alternative<core::type::single_type>(lv.tp));
 				auto sing_tp = std::get<core::type::single_type>(lv.tp);
@@ -509,7 +516,11 @@ void convert_to_quad_stmt(const core::stmt::uptr &s, code_builder &builder, gen_
 			}
 		},
 		[&](stmt::ass &s) {
-			builder.push_set(convert_to_quad_nested_var(s.v, builder, gen_data), convert_to_quad_expr(s.e, builder, gen_data));
+			auto rv = convert_to_quad_expr(s.e, builder, gen_data);
+			auto lv = convert_to_quad_nested_var(s.v, builder, gen_data);
+			instr::lvalue tmp_lv = {builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::EXP_BINARY), lv.tp};
+			builder.push_set(tmp_lv, std::move(rv));
+			builder.push_set(std::move(lv), convert_to_rvalue(std::move(tmp_lv)));
 		},
 		[&](stmt::unary &s) {
 			using arithmetic_op_type = core::exp::binary::arithmetic_op_type;
@@ -554,8 +565,8 @@ void convert_to_quad_stmt(const core::stmt::uptr &s, code_builder &builder, gen_
 		[&](stmt::loop_for &s) {
 			builder.id_allocator().push_block();
 
-			instr::lvalue iter_pos_lv = {builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::ITER_POS),
-				int_type};
+			instr::lvalue iter_pos_lv = {
+				builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::ITER_POS), int_type};
 			instr::lvalue iter_elem_lv = {builder.id_allocator().alloc_user_var(s.id, s.tp), s.tp};
 
 			auto label_body = builder.id_allocator().alloc_label(ident_allocator::label_type::LOOP_BODY);
@@ -574,8 +585,7 @@ void convert_to_quad_stmt(const core::stmt::uptr &s, code_builder &builder, gen_
 			convert_to_quad_stmt(s.s, builder, gen_data);
 
 			// iter_pos++;
-			builder.push_bin_ass(iter_pos_lv, convert_to_rvalue(iter_pos_lv),
-				{1, int_type}, core::exp::binary::arithmetic_op_type::ADD);
+			gen_incr(iter_pos_lv, builder);
 
 			builder.push_label(std::move(label_cond));
 			builder.push_cond_jump(convert_to_rvalue(std::move(iter_pos_lv)), arr_size,
@@ -702,6 +712,7 @@ gen_ic_data prepare_gen_ic_data(const core::program::uptr &p) {
 								new_meth.offset = cur_cls_data.meth_data.size() - 1;
 								new_meth.virt_class = c->class_id;
 								new_meth.type = f->tp.val;
+								new_meth.name = f->id;
 							} else {
 								it->second.virt_class = c->class_id;
 							}
@@ -719,8 +730,14 @@ std::vector<vtable_description> prepare_vtables(gen_ic_data &gen_data) {
 	for (auto &cls : gen_data.cls_data) {
 		vtable_description vt;
 		vt.vtable_addr_name = ident_allocator::get_vtable(cls.first);
+
+		std::map<size_t, gen_ic_data::class_data::method_data*> meth_off_map;
 		for (auto &meth : cls.second.meth_data)
-			vt.methods_addr_name.emplace_back(ident_allocator::get_method(meth.second.virt_class, meth.first));
+			meth_off_map[meth.second.offset] = &meth.second;
+		for (auto &meth : meth_off_map)
+			vt.methods_addr_name.emplace_back(
+				ident_allocator::get_method(meth.second->virt_class, meth.second->name));
+
 		vtables.emplace_back(std::move(vt));
 	}
 	return vtables;

@@ -9,6 +9,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 #include <iostream>
 
@@ -28,77 +29,100 @@ class basic_block_code_generator {
 
 	bool _epilog_generated = false;
 
-	void prepare_locs_for_bin_op(const instr::arg &a1, const instr::arg &a2, register_type &dst,
-		asm_code::snd_param_type &src, const std::set<core::ident> &alive_after) {
-
+	void prepare_locs_for_bin_op(const instr::rvalue &rv1, const instr::rvalue &rv2, register_type &dst,
+			asm_code::snd_param_type &src, const std::set<core::ident> &alive_after) {
 		std::visit(overloaded {
-			[&](instr::arg::var v) {
+			[&](const instr::variable_id &v) {
 				dst = _desc_mgmt.load_var_to_reg(v.id);
 			},
-			[&](int v) {
+			[&](const instr::address_offset &v) {
+				dst = load_address_offset_value_to_reg(v);
+			},
+			[&](const instr::null&) {
+				dst = _desc_mgmt.get_free_reg();
+				_code.emplace_back(asm_code::mov {dst, 0});
+			},
+			[&](const int &v) {
 				dst = _desc_mgmt.get_free_reg();
 				_code.emplace_back(asm_code::mov {dst, v});
 			},
-			[&](bool v) {
+			[&](const bool &v) {
 				dst = _desc_mgmt.get_free_reg();
 				_code.emplace_back(asm_code::mov {dst, v});
 			},
-			[&](auto) {
+			[&](auto &) {
 				assert(false);
-			}
-		}, a1.val);
+			},
+		}, rv1.val);
 
 		std::visit(overloaded {
-			[&](instr::arg::var v) {
+			[&](const instr::variable_id &v) {
 				if (alive_after.find(v.id) != alive_after.end())
 					_desc_mgmt.try_load_var_to_reg(v.id);
 				src = _desc_mgmt.get_var_loc(v.id);
 			},
-			[&](int v) {
+			[&](const instr::address_offset &v) {
+				src = convert_address_offset(v);
+			},
+			[&](const instr::null&) {
+				src = 0;
+			},
+			[&](const int &v) {
 				src = v;
 			},
-			[&](bool v) {
+			[&](const bool &v) {
 				src = v;
 			},
-			[&](auto) {
+			[&](auto &) {
 				assert(false);
-			}
-		}, a2.val);
+			},
+		}, rv2.val);
 	}
 
-	void perform_div_op(const instr::arg &a1, const instr::arg &a2, core::exp::binary::arithmetic_op_type op,
-		const core::ident &res, const std::set<core::ident> &alive_after) {
-
+	void perform_div_op(const instr::rvalue &rv1, const instr::rvalue &rv2, core::exp::binary::arithmetic_op_type op,
+			const instr::lvalue &lv, const std::set<core::ident> &alive_after) {
 		auto rdx = register_type::RDX;
-		_desc_mgmt.get_free_reg(rdx);
-
 		auto rax = register_type::RAX;
+		_desc_mgmt.forbid_reg_spill_dest_for_cur_instr(rdx);
+		_desc_mgmt.forbid_reg_spill_dest_for_cur_instr(rax);
+
+		_desc_mgmt.get_free_reg(rdx);
 		std::visit(overloaded {
-			[&](instr::arg::var v) {
+			[&](const instr::variable_id &v) {
 				_desc_mgmt.load_var_to_reg(v.id, rax);
 			},
-			[&](int v) {
+			[&](const instr::address_offset &v) {
+				load_address_offset_value_to_reg(v, rax);
+			},
+			[&](const int &v) {
 				_desc_mgmt.get_free_reg(rax);
 				_code.emplace_back(asm_code::mov {rax, v});
 			},
-			[&](auto) {
+			[&](auto &) {
 				assert(false);
-			}
-		}, a1.val);
+			},
+		}, rv1.val);
 
-		register_type src;
+		asm_code::snd_param_type src;
+		std::optional<register_type> free_reg;
 		std::visit(overloaded {
-			[&](instr::arg::var v) {
-				src = _desc_mgmt.load_var_to_reg_div(v.id);
+			[&](const instr::variable_id &v) {
+				if (alive_after.find(v.id) != alive_after.end())
+					_desc_mgmt.try_load_var_to_reg(v.id);
+				src = _desc_mgmt.get_var_loc(v.id);
 			},
-			[&](int v) {
-				src = _desc_mgmt.get_free_reg_div();
-				_code.emplace_back(asm_code::mov {src, v});
+			[&](const instr::address_offset &v) {
+				src = convert_address_offset(v);
 			},
-			[&](auto) {
+			[&](const int &v) {
+				free_reg = _desc_mgmt.get_free_reg();
+				_code.emplace_back(asm_code::mov {*free_reg, v});
+				src = *free_reg;
+			},
+			[&](auto &) {
 				assert(false);
-			}
-		}, a2.val);
+			},
+		}, rv2.val);
 
 		_desc_mgmt.detach_reg(rax, alive_after);
 
@@ -114,8 +138,10 @@ class basic_block_code_generator {
 		_code.emplace_back(asm_code::mov {rdx, 0});
 		_code.emplace_back(asm_code::binop {op, dst, src});
 
-		_desc_mgmt.associate_reg_with_modified_var(dst, res);
+		associate_modified_reg_with_lvalue(dst, lv);
 		_desc_mgmt.free_reg(free);
+		if (free_reg)
+			_desc_mgmt.free_reg(*free_reg);
 	}
 
 	void gen_basic_block_epilog(const basic_block &b) {
@@ -123,33 +149,95 @@ class basic_block_code_generator {
 		return _desc_mgmt.move_vars_to_memory(b.get_end_alive());
 	}
 
+	register_offset convert_address_offset(const instr::address_offset &r) {
+		auto reg1 = _desc_mgmt.load_var_to_reg(r.var.id);
+		if (r.index) {
+			auto reg2 = _desc_mgmt.load_var_to_reg(r.index->id);
+			return register_offset {reg1, (int64_t)r.offset * 8, register_offset::index_data {reg2, 8}};
+		}
+		return register_offset {reg1, (int64_t)r.offset * 8, std::nullopt};
+	}
+
+	register_type load_address_offset_value_to_reg(const instr::address_offset &r) {
+		auto reg = _desc_mgmt.get_free_reg(); // TODO: possibly choose reg from convert_address_offset
+		_code.emplace_back(asm_code::mov {reg, convert_address_offset(r)});
+		return reg;
+	}
+
+	void load_address_offset_value_to_reg(const instr::address_offset &r, register_type reg) {
+		_desc_mgmt.get_free_reg(reg);
+		_code.emplace_back(asm_code::mov {reg, convert_address_offset(r)});
+	}
+
+	void associate_reg_with_lvalue(register_type reg, const instr::lvalue &lv) {
+		std::visit(overloaded {
+			[&](const instr::address_offset &a) {
+				_code.emplace_back(asm_code::mov {convert_address_offset(a), reg});
+			},
+			[&](const instr::variable_id &v) {
+				_desc_mgmt.associate_reg_with_var(reg, v.id);
+			}
+		}, lv.val);
+	}
+
+	void associate_modified_reg_with_lvalue(register_type reg, const instr::lvalue &lv) {
+		std::visit(overloaded {
+			[&](const instr::address_offset &a) {
+				_code.emplace_back(asm_code::mov {convert_address_offset(a), reg});
+				_desc_mgmt.free_reg(reg);
+			},
+			[&](const instr::variable_id &v) {
+				_desc_mgmt.associate_reg_with_modified_var(reg, v.id);
+			}
+		}, lv.val);
+	}
+
 public:
 	basic_block_code_generator(const basic_block &b, stack_allocator &stack_alloc,
 			const_str_allocator &const_str_alloc, std::string epilog_label)
 			: _const_str_alloc(const_str_alloc), _desc_mgmt(_code, stack_alloc, _const_str_alloc, b.get_beg_alive()),
 			_epilog_label(std::move(epilog_label)) {
+		std::cerr << _desc_mgmt << std::endl;
 		for (auto &i : b.get_instr_info()) {
+			std::cerr << i.i << std::endl;
 			std::visit(overloaded {
-				[&](instr::prepare_call_arg e) {
+				[&](const instr::prepare_call_arg &e) {
 					std::visit(overloaded {
-						[&](instr::arg::var v) {
-							auto reg = _desc_mgmt.load_var_to_reg(v.id);
-							_code.emplace_back(asm_code::push {reg});
+						[&](const instr::variable_id &v) {
+							if (i.alive_after.find(v.id) != i.alive_after.end())
+								_desc_mgmt.try_load_var_to_reg(v.id);
+							_code.emplace_back(asm_code::push {_desc_mgmt.get_var_loc(v.id)});
 						},
-						[&](std::string v) {
-							auto reg = _desc_mgmt.load_string_to_reg(v);
-							_code.emplace_back(asm_code::push {reg});
+						[&](const instr::fixed_address &v) {
+							_code.emplace_back(asm_code::push {fixed_address {v.addr}});
 						},
-						[&](auto v) {
+						[&](const instr::address_offset &v) {
+							_code.emplace_back(asm_code::push {convert_address_offset(v)});
+						},
+						[&](const std::string &v) {
+							_code.emplace_back(asm_code::push {fixed_address {_const_str_alloc.get_str_addr(v)}});
+						},
+						[&](const instr::null&) {
+							_code.emplace_back(asm_code::push {0});
+						},
+						[&](auto &v) {
 							_code.emplace_back(asm_code::push {v});
 						},
-					}, e.a.val);
+					}, e.rv.val);
 				},
-				[&](instr::call_ass e) {
+				[&](const instr::call_ass &e) {
 					auto rax = register_type::RAX;
 					_desc_mgmt.get_free_reg(rax);
-					_code.emplace_back(asm_code::call {e.func_id});
-					_desc_mgmt.associate_reg_with_modified_var(rax, e.res_id);
+					std::visit(overloaded {
+						[&](const instr::variable_id &v) {
+							_code.emplace_back(asm_code::call {v.id});
+							associate_modified_reg_with_lvalue(rax, e.lv);
+						},
+						[&](const instr::address_offset &a) {
+							_code.emplace_back(asm_code::call {convert_address_offset(a)});
+							associate_modified_reg_with_lvalue(rax, e.lv);
+						},
+					}, e.func_hdl.val);
 
 					// remove call arguments
 					if (e.args_num > 0) {
@@ -161,25 +249,36 @@ public:
 							});
 					}
 				},
-				[&](instr::bin_ass e) {
+				[&](const instr::bin_ass &e) {
 					// Because div/mod operations are different.
 					if (e.op == core::exp::binary::arithmetic_op_type::MOD ||
 							e.op == core::exp::binary::arithmetic_op_type::DIV) {
-						perform_div_op(e.a1, e.a2, e.op, e.id, i.alive_after);
+						perform_div_op(e.rv1, e.rv2, e.op, e.lv, i.alive_after);
 						return;
 					}
 
 					register_type dst;
 					asm_code::snd_param_type src;
-					prepare_locs_for_bin_op(e.a1, e.a2, dst, src, i.alive_after);
+					prepare_locs_for_bin_op(e.rv1, e.rv2, dst, src, i.alive_after);
 
 					_desc_mgmt.detach_reg(dst, i.alive_after);
 					_code.emplace_back(asm_code::binop {e.op, dst, src});
-					_desc_mgmt.associate_reg_with_modified_var(dst, e.id);
+					associate_modified_reg_with_lvalue(dst, e.lv);
 				},
-				[&](instr::unary_ass e) {
-					auto reg = _desc_mgmt.load_var_to_reg(e.v.id);
-					_desc_mgmt.detach_reg(reg, i.alive_after);
+				[&](const instr::unary_ass &e) {
+					register_type reg;
+					std::visit(overloaded {
+						[&](const instr::variable_id &v) {
+							reg = _desc_mgmt.load_var_to_reg(v.id);
+							_desc_mgmt.detach_reg(reg, i.alive_after);
+						},
+						[&](const instr::address_offset &v) {
+							reg = load_address_offset_value_to_reg(v);
+						},
+						[&](auto &) {
+							assert(false);
+						},
+					}, e.rv.val);
 					switch (e.op) {
 					case core::exp::unary::op_type::NEG:
 						_code.emplace_back(asm_code::neg {reg});
@@ -188,34 +287,48 @@ public:
 						_code.emplace_back(asm_code::bool_not {reg});
 						break;
 					}
-					_desc_mgmt.associate_reg_with_modified_var(reg, e.id);
+					associate_modified_reg_with_lvalue(reg, e.lv);
 				},
-				[&](instr::set e) {
+				[&](const instr::set &e) {
 					std::visit(overloaded {
-						[&](instr::arg::var v) {
-							// load to register of copy existing register
+						[&](const instr::variable_id &v) {
+							// load to register or copy existing register
 							auto reg = _desc_mgmt.load_var_to_reg(v.id);
-							_desc_mgmt.associate_reg_with_var(reg, e.id);
+							associate_reg_with_lvalue(reg, e.lv);
 						},
-						[&](std::string v) {
+						[&](const instr::fixed_address &v) {
+							auto reg = _desc_mgmt.get_free_reg();
+							_code.emplace_back(asm_code::mov {reg, fixed_address {v.addr}});
+							associate_modified_reg_with_lvalue(reg, e.lv);
+						},
+						[&](const instr::address_offset &v) {
+							auto reg = load_address_offset_value_to_reg(v);
+							associate_modified_reg_with_lvalue(reg, e.lv);
+						},
+						[&](const std::string &v) {
 							auto reg = _desc_mgmt.load_string_to_reg(v);
-							_desc_mgmt.associate_reg_with_var(reg, e.id);
+							associate_modified_reg_with_lvalue(reg, e.lv);
 						},
-						[&](auto v) {
+						[&](const instr::null&) {
+							auto reg = _desc_mgmt.get_free_reg();
+							_code.emplace_back(asm_code::mov {reg, 0});
+							associate_modified_reg_with_lvalue(reg, e.lv);
+						},
+						[&](auto &v) {
 							auto reg = _desc_mgmt.get_free_reg();
 							_code.emplace_back(asm_code::mov {reg, v});
-							_desc_mgmt.associate_reg_with_var(reg, e.id);
+							associate_modified_reg_with_lvalue(reg, e.lv);
 						},
-					}, e.a.val);
+					}, e.rv.val);
 				},
-				[&](instr::jump e) {
+				[&](const instr::jump &e) {
 					gen_basic_block_epilog(b);
 					_code.emplace_back(asm_code::jump {e.label});
 				},
-				[&](instr::cond_jump e) {
+				[&](const instr::cond_jump &e) {
 					register_type l;
 					asm_code::snd_param_type r;
-					prepare_locs_for_bin_op(e.a1, e.a2, l, r, i.alive_after);
+					prepare_locs_for_bin_op(e.rv1, e.rv2, l, r, i.alive_after);
 
 					_code.emplace_back(asm_code::cmp {l, r});
 
@@ -223,32 +336,46 @@ public:
 
 					_code.emplace_back(asm_code::cond_jump {e.op, e.label_true});
 				},
-				[&](instr::label e) {
+				[&](const instr::label &e) {
 					_code.emplace_back(asm_code::label {e.name});
 				},
-				[&](instr::ret e) {
+				[&](const instr::ret &e) {
 					gen_basic_block_epilog(b);
-					if (e.a) {
+					if (e.val) {
 						auto rax = register_type::RAX;
 						std::visit(overloaded {
-							[&](instr::arg::var v) {
+							[&](const instr::variable_id &v) {
 								_desc_mgmt.load_var_to_reg(v.id, rax);
 							},
-							[&](std::string v) {
-								// no need to inform desc_mgmt - it's the end of the block
+							[&](const instr::fixed_address &v) {
+								_code.emplace_back(asm_code::mov {rax, fixed_address {v.addr}});
+							},
+							[&](const instr::address_offset &v) {
+								_code.emplace_back(asm_code::mov {rax, convert_address_offset(v)});
+							},
+							[&](const std::string &v) {
 								_code.emplace_back(asm_code::mov {rax, _const_str_alloc.get_str_addr(v)});
 							},
-							[&](auto v) {
-								// no need to inform desc_mgmt - it's the end of the block
+							[&](const instr::null&) {
+								_code.emplace_back(asm_code::mov {rax, 0});
+							},
+							[&](auto &v) {
 								_code.emplace_back(asm_code::mov {rax, v});
 							},
-						}, (*e.a).val);
+						}, e.val->val);
 					}
 					_code.emplace_back(asm_code::jump {_epilog_label});
 				},
 			}, i.i.val);
 
-			_desc_mgmt.kill_unused_vars(i.alive_after);
+
+			_desc_mgmt.end_process_cur_instr(i.alive_after);
+
+			// std::cerr << "alive_after: " << i.alive_after << std::endl;
+			// std::cerr << _desc_mgmt << std::endl;
+			// std::cerr << _code << std::endl << std::endl;
+
+			_desc_mgmt.check();
 		}
 
 		if (!_epilog_generated)
@@ -322,12 +449,14 @@ std::vector<asm_code> gen_asm_for_func(const control_flow_graph &cfg, const_str_
 	return code;
 }
 
-std::vector<asm_code> gen_program_prolog(const const_str_allocator &const_str_alloc) {
+std::vector<asm_code> gen_program_prolog(const const_str_allocator &const_str_alloc,
+		const std::vector<vtable_description> &vtables) {
 	std::vector<asm_code> code;
 	// symbols
 	code.emplace_back(asm_code::global_symbol {"_start"});
 	code.emplace_back(asm_code::extern_symbol {"_strings_equal"});
 	code.emplace_back(asm_code::extern_symbol {"_add_strings"});
+	code.emplace_back(asm_code::extern_symbol {"_alloc"});
 	code.emplace_back(asm_code::extern_symbol {"exit"});
 	code.emplace_back(asm_code::extern_symbol {"error"});
 	code.emplace_back(asm_code::extern_symbol {"printInt"});
@@ -338,6 +467,8 @@ std::vector<asm_code> gen_program_prolog(const const_str_allocator &const_str_al
 	code.emplace_back(asm_code::section {".data"});
 	for (auto &i : const_str_alloc.get_str_map())
 		code.emplace_back(asm_code::alloc_string {i.second.addr_label, i.first});
+	for (auto &v : vtables)
+		code.emplace_back(asm_code::define_vtable {v.vtable_addr_name, v.methods_addr_name});
 	// .text
 	code.emplace_back(asm_code::section {".text"});
 	// _start
@@ -348,12 +479,12 @@ std::vector<asm_code> gen_program_prolog(const const_str_allocator &const_str_al
 	return code;
 }
 
-std::vector<asm_code> gen_asm_for_prog(const std::vector<control_flow_graph> &cfgs) {
+std::vector<asm_code> gen_asm_for_prog(const program_graph &p) {
 	const_str_allocator const_str_alloc;
 	std::vector<asm_code> cfg_code;
-	for (auto &cfg : cfgs)
+	for (auto &cfg : p.control_flow_graphs())
 		add_code(cfg_code, gen_asm_for_func(cfg, const_str_alloc));
-	auto code = gen_program_prolog(const_str_alloc);
+	auto code = gen_program_prolog(const_str_alloc, p.vtables());
 	add_code(code, std::move(cfg_code));
 	return code;
 }

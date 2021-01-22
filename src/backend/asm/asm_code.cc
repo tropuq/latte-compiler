@@ -27,7 +27,13 @@ std::ostream &operator<<(std::ostream &ost, const latte::backend::register_type 
 }
 
 std::ostream &operator<<(std::ostream &ost, const latte::backend::register_offset &r) {
-	ost << '[' << r.reg;
+	ost << "QWORD [" << r.reg;
+	if (r.index) {
+		ost << " + ";
+		if (r.index->mul != 1)
+			ost << r.index->mul << " * ";
+		ost << r.index->reg;
+	}
 	if (r.offset > 0)
 		ost << " + " << r.offset;
 	else if (r.offset < 0)
@@ -117,7 +123,7 @@ std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::pop 
 }
 
 std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::call &a) {
-	return ost << "call " << a.func_name << '\n';
+	return ost << "call " << a.func_hdl << '\n';
 }
 
 std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::label &a) {
@@ -151,8 +157,11 @@ std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::exte
 	return ost << "extern " << a.name << '\n';
 }
 
-std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::syscall &) {
-	return ost << "syscall\n";
+std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::define_vtable &a) {
+	ost << a.name << " dq " << a.methods;
+	if (!a.methods.empty())
+		ost << ", ";
+	return ost << "0\n";
 }
 
 std::ostream& operator<<(std::ostream& ost, const std::vector<latte::backend::asm_code> &v) {

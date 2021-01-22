@@ -17,15 +17,10 @@ struct instr {
 	};
 	struct address_offset {
 		variable_id var;
-		using index_type = std::variant<variable_id, int>;
-		std::optional<index_type> index;
-		size_t offset;
-	};
-	struct null {
-		variable_id var;
 		std::optional<variable_id> index;
 		size_t offset;
 	};
+	struct null {};
 	struct fixed_address {
 		core::ident addr;
 	};

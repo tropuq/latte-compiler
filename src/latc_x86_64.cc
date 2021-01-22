@@ -4,7 +4,7 @@ extern "C" {
 #include "parser/Parser.h"
 }
 
-// #include "backend/asm/gen_asm.hh"
+#include "backend/asm/gen_asm.hh"
 #include "backend/ic/control_flow_graph.hh"
 #include "backend/ic/gen_ic.hh"
 #include "core/code_pos.hh"
@@ -69,13 +69,12 @@ void compile(latte::core::program::uptr &prog, out_filenames f) {
 	latte::frontend::simplify_program(prog);
 	auto qcode = latte::backend::convert_to_quad_prog(prog);
 	auto prog_graph = latte::backend::program_graph(qcode);
-	std::cerr << prog_graph << std::endl;
-	// auto asm_code = latte::backend::gen_asm_for_prog(cfgs);
+	auto asm_code = latte::backend::gen_asm_for_prog(prog_graph);
 
-	// std::fstream out(f.code_name, std::ios::out);
-	// out << asm_code << std::endl;
-	// system(concat("nasm -felf64 ", f.code_name, " && ld ", f.obj_name,
-	// 	" lib/runtime.o -lc --dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o ", f.exec_name).c_str());
+	std::fstream out(f.code_name, std::ios::out);
+	out << asm_code << std::endl;
+	system(concat("nasm -felf64 ", f.code_name, " && ld ", f.obj_name,
+		" lib/runtime.o -lc --dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o ", f.exec_name).c_str());
 }
 
 } // namespace

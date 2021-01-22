@@ -7,6 +7,6 @@
 
 namespace latte::backend {
 
-std::vector<asm_code> gen_asm_for_prog(const std::vector<control_flow_graph> &cfgs);
+std::vector<asm_code> gen_asm_for_prog(const program_graph &p);
 
 }

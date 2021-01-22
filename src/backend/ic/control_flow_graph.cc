@@ -10,64 +10,70 @@ namespace latte::backend {
 
 void update_kill_use_info(const instr &i, std::function<void(const core::ident &)> kill,
 		std::function<void(const core::ident &)> use) {
-	auto use_if_var = [&](const instr::rvalue &rv) {
+	auto update_rvalue = [&](const instr::rvalue &rv) {
 		std::visit(overloaded {
 			[&](const instr::variable_id &v) {
 				use(v.id);
 			},
 			[&](const instr::address_offset &a) {
 				use(a.var.id);
+				if (a.index)
+					use(a.index->id);
 			},
 			[](auto &) {},
 		}, rv.val);
 	};
-	auto use_if_vtablt_method = [&](const instr::func_addr &rv) {
+	auto update_func_handler = [&](const instr::func_addr &rv) {
 		std::visit(overloaded {
 			[&](const instr::address_offset &a) {
 				use(a.var.id);
+				if (a.index)
+					use(a.index->id);
 			},
 			[](auto &) {},
 		}, rv.val);
 	};
-	auto kill_if_var = [&](const instr::lvalue &lv) {
+	auto update_lvalue = [&](const instr::lvalue &lv) {
 		std::visit(overloaded {
 			[&](const instr::variable_id &v) {
 				kill(v.id);
 			},
 			[&](const instr::address_offset &a) {
-				kill(a.var.id);
+				use(a.var.id);
+				if (a.index)
+					use(a.index->id);
 			},
 			[](auto &) {},
 		}, lv.val);
 	};
 	std::visit(overloaded {
 		[&](const instr::prepare_call_arg &i) {
-			use_if_var(i.rv);
+			update_rvalue(i.rv);
 		},
 		[&](const instr::call_ass &i) {
-			kill_if_var(i.lv);
-			use_if_vtablt_method(i.func_hdl);
+			update_lvalue(i.lv);
+			update_func_handler(i.func_hdl);
 		},
 		[&](const instr::bin_ass &i) {
-			kill_if_var(i.lv);
-			use_if_var(i.rv1);
-			use_if_var(i.rv2);
+			update_lvalue(i.lv);
+			update_rvalue(i.rv1);
+			update_rvalue(i.rv2);
 		},
 		[&](const instr::unary_ass &i) {
-			kill_if_var(i.lv);
-			use_if_var(i.rv);
+			update_lvalue(i.lv);
+			update_rvalue(i.rv);
 		},
 		[&](const instr::set &i) {
-			kill_if_var(i.lv);
-			use_if_var(i.rv);
+			update_lvalue(i.lv);
+			update_rvalue(i.rv);
 		},
 		[&](const instr::cond_jump &i) {
-			use_if_var(i.rv1);
-			use_if_var(i.rv2);
+			update_rvalue(i.rv1);
+			update_rvalue(i.rv2);
 		},
 		[&](const instr::ret &i) {
 			if (i.val)
-				use_if_var(*i.val);
+				update_rvalue(*i.val);
 		},
 		[&](auto) {},
 	}, i.val);

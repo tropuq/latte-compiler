@@ -9,7 +9,6 @@ using namespace latte::core;
 
 namespace latte::frontend {
 
-// TODO: check if not dividing by 0
 template<typename T>
 void exec_oper_and_update(exp::uptr &e1, exp::uptr &e2, exp::binary::op_type op, decltype(exp::val) &res) {
 	auto e1_val = std::get<T>(e1->val);

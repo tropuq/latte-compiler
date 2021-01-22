@@ -26,6 +26,7 @@ class description_manager {
 	std::set<register_type> _free_regs;
 	std::map<core::ident, var_desc> _vars;
 	std::set<register_type> _used_calle_save_regs;
+	std::set<register_type> _spill_forbidden_regs;
 	std::vector<asm_code> &_code;
 	stack_allocator &_stack_alloc;
 	const_str_allocator &_const_str_alloc;
@@ -36,14 +37,31 @@ class description_manager {
 	}
 
 	void extract_reg(register_type reg) {
-		_free_regs.erase(reg);
+		auto success = _free_regs.erase(reg);
+		assert(success);
 		add_calle_save_reg(reg);
+		forbid_reg_spill_dest_for_cur_instr(reg);
 	}
 
 	register_type extract_reg() {
+		assert(!_free_regs.empty());
+		// TODO: choose with some priorities
 		auto reg = _free_regs.extract(_free_regs.begin()).value();
 		add_calle_save_reg(reg);
+		forbid_reg_spill_dest_for_cur_instr(reg);
 		return reg;
+	}
+
+	register_type extract_spill_reg() {
+		assert(_free_regs.empty());
+		// TODO: choose with some priorities
+		for (auto &[reg, reg_info] : _regs) {
+			if (_spill_forbidden_regs.find(reg) == _spill_forbidden_regs.end()) {
+				forbid_reg_spill_dest_for_cur_instr(reg);
+				return reg;
+			}
+		}
+		throw std::runtime_error("no available register for spill");
 	}
 
 	void kill_var_if_not_alive(const core::ident &id, const std::set<core::ident> &alive_after) {
@@ -75,7 +93,6 @@ class description_manager {
 	}
 
 	void duplicate_reg_desc(register_type reg) {
-		assert(!_free_regs.empty());
 		auto dup_reg = extract_reg();
 		_code.emplace_back(asm_code::mov {dup_reg, reg});
 		_regs[dup_reg].vars = _regs[reg].vars;
@@ -141,6 +158,7 @@ class description_manager {
 		for (auto &v : rd.vars)
 			_vars[v].regs.erase(reg);
 		rd.vars.clear();
+		forbid_reg_spill_dest_for_cur_instr(reg);
 	}
 
 public:
@@ -159,7 +177,7 @@ public:
 
 	register_type get_free_reg() {
 		if (_free_regs.empty()) {
-			auto reg = register_type::RCX; // TODO: choose properly
+			auto reg = extract_spill_reg();
 			assure_alive_reg_can_be_discarded(reg);
 			discard_register_and_alloc(reg);
 			return reg;
@@ -177,21 +195,11 @@ public:
 		}
 	}
 
-	register_type get_free_reg_div() {
-		if (_free_regs.empty()) {
-			auto reg = register_type::RCX; // TODO: choose properly but don't choose RAX, RDX
-			assure_alive_reg_can_be_discarded(reg);
-			discard_register_and_alloc(reg);
-			return reg;
-		}
-		auto reg = extract_reg(); // TODO: don't choose RAX, RDX
-		return reg;
-	}
-
 	void free_reg(register_type reg) {
 		discard_register_and_alloc(reg);
 		_regs.erase(reg);
 		_free_regs.emplace(reg);
+		_spill_forbidden_regs.erase(reg);
 	}
 
 	void associate_reg_with_var(register_type reg, const core::ident &var) {
@@ -239,17 +247,6 @@ public:
 		associate_reg_with_var(reg, var);
 	}
 
-	register_type load_var_to_reg_div(const core::ident &var) {
-		auto &vd = _vars[var];
-		if (!vd.regs.empty())
-			return *vd.regs.begin();
-		assert(vd.in_mem);
-		auto reg = get_free_reg_div();
-		_code.emplace_back(asm_code::mov {reg, _stack_alloc.get_var_mem_loc(var)});
-		associate_reg_with_var(reg, var);
-		return reg;
-	}
-
 	std::optional<register_type> try_load_var_to_reg(const core::ident &var) {
 		auto &vd = _vars[var];
 		if (!vd.regs.empty())
@@ -293,6 +290,20 @@ public:
 			kill_var_if_not_alive((vit++)->first, alive_after);
 	}
 
+	void end_process_cur_instr(const std::set<core::ident> &alive_after) {
+		kill_unused_vars(alive_after);
+		_spill_forbidden_regs.clear();
+	}
+
+	void check() {
+		for (auto &r : _regs)
+			assert(!r.second.vars.empty());
+	}
+
+	void forbid_reg_spill_dest_for_cur_instr(register_type reg) {
+		_spill_forbidden_regs.emplace(reg);
+	}
+
 	asm_code::snd_param_type get_var_loc(const core::ident &id) {
 		auto &vd = _vars[id];
 		assert(vd.in_mem || !vd.regs.empty());
@@ -305,6 +316,27 @@ public:
 	const std::set<register_type> &get_used_callee_save_regs() const {
 		return _used_calle_save_regs;
 	}
+
+	std::ostream &print(std::ostream &ost) const {
+		ost << "vars:\n";
+		for (auto &v : _vars) {
+			ost << "  " << v.first << ": in_mem=";
+			if (v.second.in_mem)
+				ost << _stack_alloc.get_var_mem_loc(v.first);
+			else
+				ost << '0';
+			ost << ", regs={" << v.second.regs << "}\n";
+		}
+		ost << "regs:\n";
+		for (auto &v : _regs)
+			ost << "  " << v.first << ": vars={" << v.second.vars << "}\n";
+		ost << "free_regs: " << _free_regs;
+		return ost;
+	}
 };
 
+} // namespace latte::backend
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::backend::description_manager &m) {
+	return m.print(ost);
 }

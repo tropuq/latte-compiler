@@ -27,11 +27,20 @@ enum class register_type {
 };
 
 struct register_offset {
-	int64_t offset;
+	struct index_data {
+		register_type reg;
+		size_t mul;
+	};
 	register_type reg;
+	int64_t offset;
+	std::optional<index_data> index;
 };
 
 struct fixed_address {
+	std::string addr_label;
+};
+
+struct relative_address {
 	std::string addr_label;
 };
 
@@ -48,21 +57,22 @@ struct asm_code {
 		snd_param_type src;
 	};
 
+	using unary_op_type = std::variant<register_offset, register_type>;
 	struct neg {
-		register_type a;
+		unary_op_type a;
 	};
 
 	struct bool_not {
-		register_type a;
+		unary_op_type a;
 	};
 
 	struct jump {
-		std::string label;
+		core::ident label;
 	};
 
 	struct cond_jump {
 		core::exp::binary::rel_op_type op;
-		std::string label;
+		core::ident label;
 	};
 
 	struct cmp {
@@ -71,7 +81,7 @@ struct asm_code {
 	};
 
 	struct push {
-		std::variant<register_type, int, bool> src;
+		snd_param_type src;
 	};
 
 	struct pop {
@@ -79,11 +89,11 @@ struct asm_code {
 	};
 
 	struct call {
-		core::ident func_name;
+		std::variant<core::ident, register_offset> func_hdl;
 	};
 
 	struct label {
-		std::string name;
+		core::ident name;
 	};
 
 	struct ret {};
@@ -93,7 +103,7 @@ struct asm_code {
 	};
 
 	struct alloc_string {
-		std::string name;
+		core::ident name;
 		std::string content;
 	};
 
@@ -105,11 +115,14 @@ struct asm_code {
 		std::string name;
 	};
 
-	struct syscall {};
+	struct define_vtable {
+		core::ident name;
+		std::vector<core::ident> methods;
+	};
 
 	using code_type = std::variant<mov, binop, neg, bool_not, jump, cond_jump,
 		cmp, push, pop, call, label, ret, section, alloc_string,
-		global_symbol, extern_symbol, syscall>;
+		global_symbol, extern_symbol, define_vtable>;
 	code_type val;
 	asm_code(code_type v) : val(std::move(v)) {}
 };
@@ -137,6 +150,6 @@ std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::sect
 std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::alloc_string &a);
 std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::global_symbol &a);
 std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::extern_symbol &a);
-std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::syscall &a);
+std::ostream &operator<<(std::ostream &ost, const latte::backend::asm_code::define_vtable &a);
 
 std::ostream& operator<<(std::ostream& ost, const std::vector<latte::backend::asm_code> &v);
