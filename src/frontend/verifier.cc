@@ -16,6 +16,14 @@ namespace latte::frontend {
 
 class func_map {
 	std::map<ident, func*> _func_map;
+	static bool same_signature(func *a, func *b) {
+		if (a->tp.val != b->tp.val || a->args.size() != b->args.size())
+			return false;
+		for (size_t i = 0; i < a->args.size(); ++i)
+			if (a->args[i].tp.val != b->args[i].tp.val)
+				return false;
+		return true;
+	}
 public:
 	void add_func(func::uptr &f) {
 		bool success = _func_map.emplace(f->id, f.get()).second;
@@ -24,8 +32,12 @@ public:
 	}
 
 	void redefine_func(func::uptr &f) {
-		if (_func_map.find(f->id) == _func_map.end()) // TODO: check if signatture is the same
+		auto it = _func_map.find(f->id);
+		if (it == _func_map.end())
 			return add_func(f);
+		if (!same_signature(it->second, f.get()))
+			throw compilation_error(concat("redefining function ", f->id,
+				"() with different signature"));
 		_func_map[f->id] = f.get();
 	}
 
