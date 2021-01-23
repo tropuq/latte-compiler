@@ -1,9 +1,10 @@
-#include "backend/ic/control_flow_graph.hh"
-#include "core/tree_types.hh"
 #include "asm_code.hh"
-#include "stack_allocator.hh"
+#include "backend/ic/control_flow_graph.hh"
 #include "const_string_allocator.hh"
+#include "core/tree_types.hh"
 #include "description_manager.hh"
+#include "remove_dead_code.hh"
+#include "stack_allocator.hh"
 
 #include <cassert>
 #include <map>
@@ -197,9 +198,7 @@ public:
 			const_str_allocator &const_str_alloc, std::string epilog_label)
 			: _const_str_alloc(const_str_alloc), _desc_mgmt(_code, stack_alloc, _const_str_alloc, b.get_beg_alive()),
 			_epilog_label(std::move(epilog_label)) {
-		std::cerr << _desc_mgmt << std::endl;
 		for (auto &i : b.get_instr_info()) {
-			std::cerr << i.i << std::endl;
 			std::visit(overloaded {
 				[&](const instr::prepare_call_arg &e) {
 					std::visit(overloaded {
@@ -368,12 +367,7 @@ public:
 				},
 			}, i.i.val);
 
-
 			_desc_mgmt.end_process_cur_instr(i.alive_after);
-
-			// std::cerr << "alive_after: " << i.alive_after << std::endl;
-			// std::cerr << _desc_mgmt << std::endl;
-			// std::cerr << _code << std::endl << std::endl;
 
 			_desc_mgmt.check();
 		}
@@ -436,15 +430,19 @@ std::vector<asm_code> gen_asm_for_func(const control_flow_graph &cfg, const_str_
 	std::vector<basic_block_code_generator> c;
 	std::set<register_type> save_regs;
 	std::vector<asm_code> code;
+	std::string epilog_label = gen_epilog_label(cfg.metadata().name);
 	for (auto &b : cfg.blocks()) {
-		c.emplace_back(b, stack_alloc, const_str_alloc, gen_epilog_label(cfg.metadata().name));
+		c.emplace_back(b, stack_alloc, const_str_alloc, epilog_label);
 		auto regs = c.back().get_used_callee_save_regs();
 		for (auto &r : regs)
 			save_regs.emplace(r);
 	}
 	add_code(code, gen_function_prolog(cfg.metadata().name, stack_alloc.get_local_var_num(), save_regs));
-	for (auto &i : c)
-		add_code(code, i.get_code());
+	for (auto &i : c) {
+		auto basic_block_code = i.get_code();
+		remove_dead_code(basic_block_code, epilog_label);
+		add_code(code, std::move(basic_block_code));
+	}
 	add_code(code, gen_function_epilog(cfg.metadata().name, save_regs));
 	return code;
 }

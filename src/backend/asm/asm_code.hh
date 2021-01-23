@@ -45,9 +45,10 @@ struct relative_address {
 };
 
 struct asm_code {
+	using fst_param_type = std::variant<register_offset, register_type>;
 	using snd_param_type = std::variant<register_offset, register_type, int, bool, fixed_address>;
 	struct mov {
-		std::variant<register_offset, register_type> dst;
+		fst_param_type dst;
 		snd_param_type src;
 	};
 
@@ -57,13 +58,12 @@ struct asm_code {
 		snd_param_type src;
 	};
 
-	using unary_op_type = std::variant<register_offset, register_type>;
 	struct neg {
-		unary_op_type a;
+		fst_param_type a;
 	};
 
 	struct bool_not {
-		unary_op_type a;
+		fst_param_type a;
 	};
 
 	struct jump {
@@ -88,8 +88,9 @@ struct asm_code {
 		register_type dst;
 	};
 
+	using func_hdl_type = std::variant<core::ident, register_offset>;
 	struct call {
-		std::variant<core::ident, register_offset> func_hdl;
+		func_hdl_type func_hdl;
 	};
 
 	struct label {

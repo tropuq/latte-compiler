@@ -3,7 +3,8 @@ CXX = g++ -std=c++17
 CCFLAGS = -g -Wall -Wextra -fdiagnostics-color=always -I./
 
 OBJS = Absyn.o Lexer.o Parser.o convert.o verifier.o simplifier.o \
-	code_printer.o gen_ic.o control_flow_graph.o gen_asm.o asm_code.o
+	code_printer.o gen_ic.o control_flow_graph.o gen_asm.o asm_code.o \
+	remove_dead_code.o
 
 .PHONY : clean
 
@@ -64,8 +65,14 @@ asm_code.o: backend/asm/asm_code.cc backend/asm/asm_code.hh \
  core/tree_types.hh core/code_pos.hh utils/utils.hh
 	${CXX} ${CCFLAGS} -c backend/asm/asm_code.cc
 
-gen_asm.o: backend/asm/gen_asm.cc backend/ic/control_flow_graph.hh \
- backend/ic/code_types.hh core/tree_types.hh core/code_pos.hh \
- utils/utils.hh backend/asm/asm_code.hh backend/asm/stack_allocator.hh \
- backend/asm/const_string_allocator.hh backend/asm/description_manager.hh
+gen_asm.o: backend/asm/gen_asm.cc backend/asm/asm_code.hh \
+ core/tree_types.hh core/code_pos.hh utils/utils.hh \
+ backend/ic/control_flow_graph.hh backend/ic/code_types.hh \
+ backend/asm/const_string_allocator.hh backend/asm/description_manager.hh \
+ backend/asm/stack_allocator.hh backend/asm/remove_dead_code.hh
 	${CXX} ${CCFLAGS} -c backend/asm/gen_asm.cc
+
+remove_dead_code.o: backend/asm/remove_dead_code.cc backend/asm/asm_code.hh \
+ core/tree_types.hh core/code_pos.hh utils/utils.hh \
+ backend/asm/remove_dead_code.hh
+	${CXX} ${CCFLAGS} -c backend/asm/remove_dead_code.cc
