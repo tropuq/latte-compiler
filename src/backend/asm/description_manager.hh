@@ -45,8 +45,40 @@ class description_manager {
 
 	register_type extract_reg() {
 		assert(!_free_regs.empty());
-		// TODO: choose with some priorities
-		auto reg = _free_regs.extract(_free_regs.begin()).value();
+
+		auto better_reg = [](register_type lr, register_type rr) {
+			auto tier = [](register_type reg) {
+				switch (reg) {
+				case register_type::RCX:
+				case register_type::RBX:
+				case register_type::RSI:
+				case register_type::RDI:
+				case register_type::R8:
+				case register_type::R9:
+				case register_type::R10:
+				case register_type::R11:
+				case register_type::R12:
+				case register_type::R13:
+				case register_type::R14:
+				case register_type::R15:
+					return 1;
+				case register_type::RAX:
+				case register_type::RDX:
+					return 2;
+				default:
+					return 10;
+				}
+			};
+			return tier(lr) < tier(rr);
+		};
+
+		auto best_reg = _free_regs.begin();
+		for (auto it = _free_regs.begin()++; it != _free_regs.end(); ++it) {
+			if (better_reg(*it, *best_reg))
+				best_reg = it;
+		}
+
+		auto reg = _free_regs.extract(best_reg).value();
 		add_calle_save_reg(reg);
 		forbid_reg_spill_dest_for_cur_instr(reg);
 		return reg;
