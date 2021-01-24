@@ -86,14 +86,32 @@ class description_manager {
 
 	register_type extract_spill_reg() {
 		assert(_free_regs.empty());
-		// TODO: choose with some priorities
-		for (auto &[reg, reg_info] : _regs) {
+		struct reg_info {
+			size_t vars_to_store;
+			register_type reg;
+		};
+		auto calc_reg_info = [&](register_type reg) {
+			reg_info ret = {0, reg};
+			for (auto &v : _regs[reg].vars)
+				if (!_vars[v].in_mem && _vars[v].regs.size() <= 1)
+					++ret.vars_to_store;
+			return ret;
+		};
+		auto is_better = [](const reg_info &r1, const reg_info &r2) {
+			return r1.vars_to_store < r2.vars_to_store;
+		};
+		std::optional<reg_info> best;
+		for (auto &[reg, _] : _regs) {
 			if (_spill_forbidden_regs.find(reg) == _spill_forbidden_regs.end()) {
-				forbid_reg_spill_dest_for_cur_instr(reg);
-				return reg;
+				auto info = calc_reg_info(reg);
+				if (!best || is_better(info, *best))
+					best = info;
 			}
 		}
-		throw std::runtime_error("no available register for spill");
+		if (!best)
+			throw std::runtime_error("no available register for spill");
+		forbid_reg_spill_dest_for_cur_instr(best->reg);
+		return best->reg;
 	}
 
 	void kill_var_if_not_alive(const core::ident &id, const std::set<core::ident> &alive_after) {
