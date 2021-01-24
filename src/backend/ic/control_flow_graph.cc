@@ -1,4 +1,5 @@
 #include "backend/ic/control_flow_graph.hh"
+#include "lcse.hh"
 #include "utils/utils.hh"
 
 #include <iostream>
@@ -128,6 +129,7 @@ std::vector<basic_block> control_flow_graph::create_basic_blocks(const std::vect
 	std::vector<basic_block> blocks;
 	std::vector<instr> block_instrs;
 	auto next_block = [&]() {
+		perform_lcse(block_instrs);
 		blocks.emplace_back(std::move(block_instrs));
 		block_instrs.clear();
 	};

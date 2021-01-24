@@ -200,11 +200,15 @@ inline std::ostream &operator<<(std::ostream &ost, const latte::backend::instr &
 	return ost << i.val;
 }
 
-inline std::ostream &operator<<(std::ostream &ost, const latte::backend::func &f) {
-	ost << f.meta.name << ":\n"; // TODO: print args
-	for (auto &i : f.instrs)
+inline std::ostream &operator<<(std::ostream &ost, const std::vector<latte::backend::instr> &instrs) {
+	for (auto &i : instrs)
 		ost << "  " << i << '\n';
 	return ost;
+}
+
+inline std::ostream &operator<<(std::ostream &ost, const latte::backend::func &f) {
+	ost << f.meta.name << ":\n"; // TODO: print args
+	return ost << f.instrs;
 }
 
 inline std::ostream &operator<<(std::ostream &ost, const latte::backend::vtable_description &v) {

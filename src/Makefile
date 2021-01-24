@@ -4,7 +4,7 @@ CCFLAGS = -g -Wall -Wextra -fdiagnostics-color=always -I./
 
 OBJS = Absyn.o Lexer.o Parser.o convert.o verifier.o simplifier.o \
 	code_printer.o gen_ic.o control_flow_graph.o gen_asm.o asm_code.o \
-	remove_dead_code.o
+	remove_dead_code.o lcse.o
 
 .PHONY : clean
 
@@ -58,7 +58,7 @@ gen_ic.o: backend/ic/gen_ic.cc utils/utils.hh backend/ic/code_types.hh \
 
 control_flow_graph.o: backend/ic/control_flow_graph.cc \
  backend/ic/control_flow_graph.hh backend/ic/code_types.hh \
- core/tree_types.hh core/code_pos.hh utils/utils.hh
+ core/tree_types.hh core/code_pos.hh utils/utils.hh backend/ic/lcse.hh
 	${CXX} ${CCFLAGS} -c backend/ic/control_flow_graph.cc
 
 asm_code.o: backend/asm/asm_code.cc backend/asm/asm_code.hh \
@@ -76,3 +76,7 @@ remove_dead_code.o: backend/asm/remove_dead_code.cc backend/asm/asm_code.hh \
  core/tree_types.hh core/code_pos.hh utils/utils.hh \
  backend/asm/remove_dead_code.hh
 	${CXX} ${CCFLAGS} -c backend/asm/remove_dead_code.cc
+
+lcse.o: backend/ic/lcse.cc backend/ic/lcse.hh backend/ic/code_types.hh \
+ core/tree_types.hh core/code_pos.hh utils/utils.hh
+	${CXX} ${CCFLAGS} -c backend/ic/lcse.cc
