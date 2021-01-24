@@ -274,6 +274,14 @@ public:
 						[&](const instr::address_offset &v) {
 							reg = load_address_offset_value_to_reg(v);
 						},
+						[&](const int &v) {
+							reg = _desc_mgmt.get_free_reg();
+							_code.emplace_back(asm_code::mov {reg, v});
+						},
+						[&](const bool &v) {
+							reg = _desc_mgmt.get_free_reg();
+							_code.emplace_back(asm_code::mov {reg, v});
+						},
 						[&](auto &) {
 							assert(false);
 						},

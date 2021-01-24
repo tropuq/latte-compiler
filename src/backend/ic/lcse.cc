@@ -108,6 +108,16 @@ class assignment_manager {
 	}
 
 public:
+	component get_least_tier_equal_component(const component &v) const {
+		auto it = std::find_if(_equal_vars.begin(), _equal_vars.end(),
+			[&](const component_set &s) {
+				return s.count(v);
+			});
+		if (it != _equal_vars.end())
+			return *it->begin();
+		return v;
+	}
+
 	void modify_var(variable_id v) {
 		for (auto &s : _equal_vars)
 			s.erase(v);
@@ -238,7 +248,7 @@ std::ostream &operator<<(std::ostream &ost, const latte::backend::assignment_man
 
 namespace latte::backend {
 
-instr::rvalue::val_type component_to_rvalue(component c) {
+instr::rvalue::val_type component_to_rvalue_val_type(component c) {
 	return std::visit([](auto &v) -> instr::rvalue::val_type {
 			return std::move(v);
 		}, c);
@@ -246,7 +256,7 @@ instr::rvalue::val_type component_to_rvalue(component c) {
 
 void perform_lcse(std::vector<instr> &instrs) {
 	assignment_manager mgmt;
-	auto try_get_component = [](const instr::rvalue &v) -> std::optional<component> {
+	auto rvalue_to_component = [](const instr::rvalue &v) -> std::optional<component> {
 		std::optional<component> comp = std::nullopt;
 		std::visit(overloaded {
 			[&](const variable_id &v) {
@@ -265,7 +275,7 @@ void perform_lcse(std::vector<instr> &instrs) {
 		}, v.val);
 		return comp;
 	};
-	auto try_get_variable_id = [](auto &v) {
+	auto rvalue_to_variable_id = [](auto &v) {
 		return std::holds_alternative<variable_id>(v.val) ?
 			std::make_optional(std::get<variable_id>(v.val)) : std::nullopt;
 	};
@@ -276,19 +286,35 @@ void perform_lcse(std::vector<instr> &instrs) {
 			auto tp = lv.tp;
 			instr.val = instr::set {
 				.lv = std::move(lv),
-				.rv = {component_to_rvalue(std::move(*new_var)), tp}
+				.rv = {component_to_rvalue_val_type(std::move(*new_var)), tp}
 			};
 		};
+		auto simplify_rvalue = [&](instr::rvalue &rv) {
+			auto var = rvalue_to_variable_id(rv);
+			if (!var)
+				return;
+			auto eq_comp = mgmt.get_least_tier_equal_component(*var);
+			rv.val = component_to_rvalue_val_type(std::move(eq_comp));
+		};
 		std::visit(overloaded {
+			[&](instr::prepare_call_arg &i) {
+				simplify_rvalue(i.rv);
+			},
+			[&](instr::ret &i) {
+				if (i.val)
+					simplify_rvalue(*i.val);
+			},
 			[&](instr::call_ass &i) {
-				auto lv = try_get_variable_id(i.lv);
+				auto lv = rvalue_to_variable_id(i.lv);
 				if (lv)
 					mgmt.modify_var(*lv);
 			},
 			[&](instr::bin_ass &i) {
-				auto lv = try_get_variable_id(i.lv);
-				auto rv1 = try_get_component(i.rv1);
-				auto rv2 = try_get_component(i.rv2);
+				simplify_rvalue(i.rv1);
+				simplify_rvalue(i.rv2);
+				auto lv = rvalue_to_variable_id(i.lv);
+				auto rv1 = rvalue_to_component(i.rv1);
+				auto rv2 = rvalue_to_component(i.rv2);
 				if (lv && rv1 && rv2)
 					substitute_to_set(i.lv, mgmt.add_binary_ass(*lv, *rv1, *rv2, i.op));
 				else if (rv1 && rv2)
@@ -297,8 +323,9 @@ void perform_lcse(std::vector<instr> &instrs) {
 					mgmt.modify_var(*lv);
 			},
 			[&](instr::unary_ass &i) {
-				auto lv = try_get_variable_id(i.lv);
-				auto rv = try_get_component(i.rv);
+				simplify_rvalue(i.rv);
+				auto lv = rvalue_to_variable_id(i.lv);
+				auto rv = rvalue_to_component(i.rv);
 				if (lv && rv)
 						substitute_to_set(i.lv, mgmt.add_unary_ass(*lv, *rv, i.op));
 				else if (rv)
@@ -307,8 +334,9 @@ void perform_lcse(std::vector<instr> &instrs) {
 					mgmt.modify_var(*lv);
 			},
 			[&](instr::set &i) {
-				auto lv = try_get_variable_id(i.lv);
-				auto rv = try_get_component(i.rv);
+				simplify_rvalue(i.rv);
+				auto lv = rvalue_to_variable_id(i.lv);
+				auto rv = rvalue_to_component(i.rv);
 				if (lv && rv)
 					mgmt.add_ass(*lv, *rv);
 				else if (lv)

@@ -518,7 +518,7 @@ void convert_to_quad_stmt(const core::stmt::uptr &s, code_builder &builder, gen_
 		[&](stmt::ass &s) {
 			auto rv = convert_to_quad_expr(s.e, builder, gen_data);
 			auto lv = convert_to_quad_nested_var(s.v, builder, gen_data);
-			instr::lvalue tmp_lv = {builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::EXP_BINARY), lv.tp};
+			instr::lvalue tmp_lv = {builder.id_allocator().alloc_tmp_var(ident_allocator::var_type::EXP_UNARY), lv.tp};
 			builder.push_set(tmp_lv, std::move(rv));
 			builder.push_set(std::move(lv), convert_to_rvalue(std::move(tmp_lv)));
 		},
