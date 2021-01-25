@@ -246,7 +246,7 @@ instr::rvalue get_default_value(const core::type::val_type &tp) {
 						ret = {0, tp};
 						return;
 					case st::type_enum::STR:
-						ret = {"", tp};
+						ret = {std::string(""), tp};
 						return;
 					case st::type_enum::BOOL:
 						ret = {false, tp};
