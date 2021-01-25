@@ -1,6 +1,6 @@
 CC = gcc
 CXX = g++ -std=c++17
-CCFLAGS = -g -Wall -Wextra -fdiagnostics-color=always -I./
+CCFLAGS = -O3 -g -Wall -Wextra -fdiagnostics-color=always -I./
 
 OBJS = Absyn.o Lexer.o Parser.o convert.o verifier.o simplifier.o \
 	code_printer.o gen_ic.o control_flow_graph.o gen_asm.o asm_code.o \
