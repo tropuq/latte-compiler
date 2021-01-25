@@ -33,6 +33,16 @@ W katalogu utils znajduje się implementacja ogólnych funkcjonalności używany
 	colors.hh - definicja kolorów używanych przy wypisywaniu
 	utils.hh - lososwe funkcje
 W katalogu backend znajduje się kod backendu. Kod został podzielony na dwa podkatalogi
-	ic - konwersja drzewa programu do kodu pośredniego i generację grafu przepływu dla funkcji
-	asm - konwersja kodu pośredniego do assemblera, w tym algorytm alokacji rejestrów
+	ic - konwersja drzewa programu do kodu pośredniego, generacja grafu
+		przepływu dla funkcji, LCSE
+	asm - konwersja kodu pośredniego do assemblera, w tym algorytm alokacji
+		rejestrów, usuwanie martwego kodu
 Plik latc_x86_64.cc wywołuje całą resztę rozwiązania.
+
+W ramach optymalizacji zrealizowałem
+	frontend - usuwanie martwego kodu po returnach, obliczanie wyrażeń na
+		stałych w czasie kompilacji
+	backend - LCSE, usuwanie martwych operacji na rejestrach z wynikowego
+		kodu asm, zredukowanie wykorzystania zmiennych przez zastąpienie ich
+		stałymi (np. zamiana int z = readInt(); x = 4; y = x + z; na
+		z = readInt(); y = 4 + z;)
